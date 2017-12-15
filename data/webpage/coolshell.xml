@@ -1,0 +1,2196 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>酷 壳 &#8211; CoolShell</title>
+	<atom:link href="http://coolshell.cn/feed" rel="self" type="application/rss+xml" />
+	<link>http://coolshell.cn</link>
+	<description>享受编程和技术所带来的快乐 - Coding Your Ambition</description>
+	<lastBuildDate>Sat, 08 Apr 2017 13:11:04 +0000</lastBuildDate>
+	<language>zh-CN</language>
+	<sy:updatePeriod>hourly</sy:updatePeriod>
+	<sy:updateFrequency>1</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=4.7.4</generator>
+	<item>
+		<title>如何重构“箭头型”代码</title>
+		<link>http://coolshell.cn/articles/17757.html</link>
+		<comments>http://coolshell.cn/articles/17757.html#comments</comments>
+		<pubDate>Wed, 05 Apr 2017 10:07:14 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[C/C++语言]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[编程语言]]></category>
+		<category><![CDATA[Code Review]]></category>
+		<category><![CDATA[Programming]]></category>
+		<category><![CDATA[Refactory]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17757</guid>
+		<description><![CDATA[本文主要起因是，一次在微博上和朋友关于嵌套好几层的if-else语句的代码重构的讨论（微博原文），在微博上大家有各式各样的问题和想法。按道理来说这些都是编程的基...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17757.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p>本文主要起因是，一次在微博上和朋友关于嵌套好几层的if-else语句的代码重构的讨论（<a href="http://weibo.com/1401880315/ECmCW0oy2" target="_blank">微博原文</a>），在微博上大家有各式各样的问题和想法。按道理来说这些都是编程的基本功，似乎不太值得写一篇文章，不过我觉得很多东西可以从一个简单的东西出发，到达本质，所以，我觉得有必要在这里写一篇的文章。不一定全对，只希望得到更多的讨论，因为有了更深入的讨论才能进步。</p>
+<p>文章有点长，我在文章最后会给出相关的思考和总结陈词，你可以跳到结尾。</p>
+<p>所谓箭头型代码，基本上来说就是下面这个图片所示的情况。</p>
+<p><img class="aligncenter wp-image-17758 size-full" src="http://coolshell.cn//wp-content/uploads/2017/04/IMG_7411.jpg" alt="" width="720" height="511" srcset="http://coolshell.cn//wp-content/uploads/2017/04/IMG_7411.jpg 720w, http://coolshell.cn//wp-content/uploads/2017/04/IMG_7411-300x213.jpg 300w, http://coolshell.cn//wp-content/uploads/2017/04/IMG_7411-380x270.jpg 380w" sizes="(max-width: 720px) 100vw, 720px" /></p>
+<p>那么，这样“箭头型”的代码有什么问题呢？看上去也挺好看的，有对称美。但是……</p>
+<p>关于箭头型代码的问题有如下几个：</p>
+<p><span id="more-17757"></span></p>
+<p>1）我的显示器不够宽，箭头型代码缩进太狠了，需要我来回拉水平滚动条，这让我在读代码的时候，相当的不舒服。</p>
+<p>2）除了宽度外还有长度，有的代码的<code>if-else</code>里的<code>if-else</code>里的<code>if-else</code>的代码太多，读到中间你都不知道中间的代码是经过了什么样的层层检查才来到这里的。</p>
+<p>总而言之，<strong>“箭头型代码”如果嵌套太多，代码太长的话，会相当容易让维护代码的人（包括自己）迷失在代码中，因为看到最内层的代码时，你已经不知道前面的那一层一层的条件判断是什么样的，代码是怎么运行到这里的，所以，箭头型代码是非常难以维护和Debug的</strong>。</p>
+<h4>微博上的案例 与 Guard Clauses</h4>
+<p>OK，我们先来看一下微博上的那个示例，代码量如果再大一点，嵌套再多一点，你很容易会在条件中迷失掉（下面这个示例只是那个“大箭头”下的一个小箭头）</p>
+<pre class="brush: cpp; title: ; notranslate">
+FOREACH(Ptr&lt;WfExpression&gt;, argument, node-&gt;arguments) {
+    int index = manager-&gt;expressionResolvings.Keys().IndexOf(argument.Obj());
+    if (index != -1) {
+        auto type = manager-&gt;expressionResolvings.Values()[index].type;
+        if (! types.Contains(type.Obj())) {
+            types.Add(type.Obj());
+            if (auto group = type-&gt;GetTypeDescriptor()-&gt;GetMethodGroupByName(L&quot;CastResult&quot;, true)) {
+                int count = group-&gt;GetMethodCount();
+                for (int i = 0; i &lt; count; i++) { auto method = group-&gt;GetMethod(i);
+                    if (method-&gt;IsStatic()) {
+                        if (method-&gt;GetParameterCount() == 1 &amp;&amp;
+                            method-&gt;GetParameter(0)-&gt;GetType()-&gt;GetTypeDescriptor() == description::GetTypeDescriptor&lt;DescriptableObject&gt;() &amp;&amp;
+                            method-&gt;GetReturn()-&gt;GetTypeDescriptor() != description::GetTypeDescriptor&lt;void&gt;() ) {
+                            symbol-&gt;typeInfo = CopyTypeInfo(method-&gt;GetReturn());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+</pre>
+<p>上面这段代码，可以把条件反过来写，然后就可以把箭头型的代码解掉了，重构的代码如下所示：</p>
+<pre class="brush: cpp; title: ; notranslate">
+FOREACH(Ptr&lt;WfExpression&gt;, argument, node-&gt;arguments) {
+    int index = manager-&gt;expressionResolvings.Keys().IndexOf(argument.Obj());
+    if (index == -1)  continue;
+    
+    auto type = manager-&gt;expressionResolvings.Values()[index].type;
+    if ( types.Contains(type.Obj()))  continue;
+    
+    types.Add(type.Obj());
+
+    auto group = type-&gt;GetTypeDescriptor()-&gt;GetMethodGroupByName(L&quot;CastResult&quot;, true);
+    if  ( ! group ) continue;
+ 
+    int count = group-&gt;GetMethodCount();
+    for (int i = 0; i &lt; count; i++) { auto method = group-&gt;GetMethod(i);
+        if (! method-&gt;IsStatic()) continue;
+       
+        if ( method-&gt;GetParameterCount() == 1 &amp;&amp;
+               method-&gt;GetParameter(0)-&gt;GetType()-&gt;GetTypeDescriptor() == description::GetTypeDescriptor&lt;DescriptableObject&gt;() &amp;&amp;
+               method-&gt;GetReturn()-&gt;GetTypeDescriptor() != description::GetTypeDescriptor&lt;void&gt;() ) {
+            symbol-&gt;typeInfo = CopyTypeInfo(method-&gt;GetReturn());
+            break;
+        }
+    }
+}
+</pre>
+<p>这种代码的重构方式叫 <strong>Guard Clauses</strong></p>
+<ul>
+<li><a href="https://martinfowler.com/" target="_blank">Martin Fowler</a> 的 Refactoring 的网站上有相应的说明《<a href="https://refactoring.com/catalog/replaceNestedConditionalWithGuardClauses.html" target="_blank">Replace Nested Conditional with Guard Clauses</a>》。</li>
+</ul>
+<ul>
+<li><a href="https://blog.codinghorror.com/" target="_blank">Coding Horror</a> 上也有一篇文章讲了这种重构的方式 —— 《<a href="https://blog.codinghorror.com/flattening-arrow-code/" target="_blank">Flattening Arrow Code</a>》</li>
+</ul>
+<ul>
+<li><a href="http://stackoverflow.com/" target="_blank">StackOverflow</a> 上也有相关的问题说了这种方式 —— 《<a href="http://stackoverflow.com/questions/356121/refactor-nested-if-statement-for-clarity" target="_blank">Refactor nested IF statement for clarity</a>》</li>
+</ul>
+<p>这里的思路其实就是，<strong>让出错的代码先返回，前面把所有的错误判断全判断掉，然后就剩下的就是正常的代码了</strong>。</p>
+<h4>抽取成函数</h4>
+<p>微博上有些人说，continue 语句破坏了阅读代码的通畅，我觉得他们一定没有好好读这里面的代码，其实，我们可以看到，所有的 if 语句都是在判断是否出错的情况，所以，在维护代码的时候，你可以完全不理会这些 if 语句，因为都是出错处理的，而剩下的代码都是正常的功能代码，反而更容易阅读了。当然，一定有不是上面代码里的这种情况，那么，不用continue ，我们还能不能重构呢？</p>
+<p>当然可以，抽成函数：</p>
+<pre class="brush: cpp; title: ; notranslate">bool CopyMethodTypeInfo(auto &amp;method, auto &amp;group, auto &amp;symbol) 
+{
+    if (! method-&gt;IsStatic()) {
+        return true;
+    }
+    if ( method-&gt;GetParameterCount() == 1 &amp;&amp;
+           method-&gt;GetParameter(0)-&gt;GetType()-&gt;GetTypeDescriptor() == description::GetTypeDescriptor&lt;DescriptableObject&gt;() &amp;&amp;
+           method-&gt;GetReturn()-&gt;GetTypeDescriptor() != description::GetTypeDescriptor&lt;void&gt;() ) {
+        symbol-&gt;typeInfo = CopyTypeInfo(method-&gt;GetReturn());
+        return false;
+    }
+    return true;
+}
+
+void ExpressionResolvings(auto &amp;manager, auto &amp;argument, auto &amp;symbol) 
+{
+    int index = manager-&gt;expressionResolvings.Keys().IndexOf(argument.Obj());
+    if (index == -1) return;
+    
+    auto type = manager-&gt;expressionResolvings.Values()[index].type;
+    if ( types.Contains(type.Obj())) return;
+
+    types.Add(type.Obj());
+    auto group = type-&gt;GetTypeDescriptor()-&gt;GetMethodGroupByName(L&quot;CastResult&quot;, true);
+    if  ( ! group ) return;
+
+    int count = group-&gt;GetMethodCount();
+    for (int i = 0; i &lt; count; i++) { auto method = group-&gt;GetMethod(i);
+        if ( ! CopyMethodTypeInfo(method, group, symbol) ) break;
+    }
+}
+
+...
+...
+FOREACH(Ptr&lt;WfExpression&gt;, argument, node-&gt;arguments) {
+    ExpressionResolvings(manager, arguments, symbol)
+}
+...
+...
+</pre>
+<p>你发出现，抽成函数后，代码比之前变得更容易读和更容易维护了。不是吗？</p>
+<p>有人说：“如果代码不共享，就不要抽取成函数！”，持有这个观点的人太死读书了。函数是代码的封装或是抽象，并不一定用来作代码共享使用，函数用于屏蔽细节，让其它代码耦合于接口而不是细节实现，这会让我们的代码更为简单，简单的东西都能让人易读也易维护。这才是函数的作用。</p>
+<h4>嵌套的 if 外的代码</h4>
+<p>微博上还有人问，原来的代码如果在各个 if 语句后还有要执行的代码，那么应该如何重构。比如下面这样的代码。</p>
+<pre class="brush: cpp; title: 原版; notranslate">for(....) {
+    do_before_cond1()
+    if (cond1) {
+        do_before_cond2();
+        if (cond2) {
+            do_before_cond3();
+            if (cond3) {
+                do_something();
+            }
+            do_after_cond3();
+        }
+        do_after_cond2();
+    }
+    do_after_cond1();
+}</pre>
+<p>上面这段代码中的那些 <code>do_after_condX()</code> 是无论条件成功与否都要执行的。所以，我们拉平后的代码如下所示：</p>
+<pre class="brush: cpp; title: 重构第一版; notranslate">for(....) {
+    do_before_cond1();
+    if ( !cond1 ) {
+        do_after_cond1();
+        continue
+    } 
+    do_after_cond1();
+
+    do_before_cond2();
+    if ( !cond2 ) { 
+        do_after_cond2();
+        continue;
+    }
+    do_after_cond2();
+
+    do_before_cond3();
+    if ( !cond3 ) {
+        do_after_cond3();
+        continue;
+    }
+    do_after_cond3();
+
+    do_something();  
+}</pre>
+<p>你会发现，上面的 <code>do_after_condX</code> 出现了两份。<strong>如果 if 语句块中的代码改变了某些<code>do_after_condX</code>依赖的状态，那么这是最终版本。</strong></p>
+<p>但是，如果它们之前没有依赖关系的话，根据 DRY 原则，我们就可以只保留一份，那么直接掉到 if 条件前就好了，如下所示：</p>
+<pre class="brush: cpp; title: 重构第二版; notranslate">for(....) {
+    do_before_cond1();
+    do_after_cond1();
+    if ( !cond1 ) continue;
+ 
+    do_before_cond2();
+    do_after_cond2();
+    if ( !cond2 ) continue;
+
+    do_before_cond3();
+    do_after_cond3();
+    if ( !cond3 ) continue;
+
+    do_something();  
+}
+</pre>
+<p>此时，你会说，我靠，居然，改变了执行的顺序，把条件放到 <code>do_after_condX()</code> 后面去了。这会不会有问题啊？</p>
+<p>其实，你再分析一下之前的代码，你会发现，本来，cond1 是判断 do_before_cond1() 是否出错的，如果有成功了，才会往下执行。而 do_after_cond1() 是无论如何都要执行的。从逻辑上来说，do_after_cond1()其实和do_before_cond1()的执行结果无关，而 cond1 却和是否去执行 do_before_cond2() 相关了。如果我把断行变成下面这样，反而代码逻辑更清楚了。</p>
+<pre class="brush: cpp; title: 重构第三版; notranslate">for(....) {
+
+    do_before_cond1();
+    do_after_cond1();
+
+
+    if ( !cond1 ) continue;  // &lt;-- cond1 成了是否做第二个语句块的条件
+    do_before_cond2();
+    do_after_cond2();
+
+    if ( !cond2 ) continue; // &lt;-- cond2 成了是否做第三个语句块的条件
+    do_before_cond3();
+    do_after_cond3();
+
+    if ( !cond3 ) continue; //&lt;-- cond3 成了是否做第四个语句块的条件
+    do_something(); 
+ 
+}
+</pre>
+<p>于是乎，在未来维护代码的时候，维护人一眼看上去就明白，代码在什么时候会执行到哪里。 这个时候，你会发现，把这些语句块抽成函数，代码会干净的更多，再重构一版：</p>
+<pre class="brush: cpp; title: 重构第四版; notranslate">
+bool do_func3() {
+   do_before_cond2();
+   do_after_cond2();
+   return cond3;
+}
+
+bool do_func2() {
+   do_before_cond2();
+   do_after_cond2();
+   return cond2;
+}
+
+bool do_func1() {
+   do_before_cond1();
+   do_after_cond1();
+   return cond1;
+}
+
+// for-loop 你可以重构成这样
+for (...) {
+    bool cond = do_func1();
+    if (cond) cond = do_func2();
+    if (cond) cond = do_func3();
+    if (cond) do_something();
+}
+
+// for-loop 也可以重构成这样
+for (...) {
+    if ( ! do_func1() ) continue;
+    if ( ! do_func2() ) continue;
+    if ( ! do_func3() ) continue;
+    do_something();
+}
+</pre>
+<p>上面，我给出了两个版本的for-loop，你喜欢哪个？我喜欢第二个。这个时候，因为for-loop里的代码非常简单，就算你不喜欢 continue ，这样的代码阅读成本已经很低了。</p>
+<h4>状态检查嵌套</h4>
+<p>接下来，我们再来看另一个示例。下面的代码的伪造了一个场景——把两个人拉到一个一对一的聊天室中，因为要检查双方的状态，所以，代码可能会写成了“箭头型”。</p>
+<pre class="brush: cpp; title: ; notranslate">int ConnectPeer2Peer(Conn *pA, Conn* pB, Manager *manager)
+{
+    if ( pA-&gt;isConnected() ) {
+        manager-&gt;Prepare(pA);
+        if ( pB-&gt;isConnected() ) {
+            manager-&gt;Prepare(pB);
+            if ( manager-&gt;ConnectTogther(pA, pB) ) {
+                pA-&gt;Write(&quot;connected&quot;);
+                pB-&gt;Write(&quot;connected&quot;);
+                return S_OK;
+            }else{
+                return S_ERROR;
+            }
+
+        }else {
+            pA-&gt;Write(&quot;Peer is not Ready, waiting...&quot;);
+            return S_RETRY;
+        }
+    }else{
+        if ( pB-&gt;isConnected() ) {
+            manager-&gt;Prepare();
+            pB-&gt;Write(&quot;Peer is not Ready, waiting...&quot;);
+            return S_RETRY;
+        }else{
+            pA-&gt;Close();
+            pB-&gt;Close();
+            return S_ERROR;
+        }
+    }
+    //Shouldn't be here!
+    return S_ERROR;
+}</pre>
+<p>重构上面的代码，我们可以先分析一下上面的代码，说明了，上面的代码就是对 PeerA 和 PeerB 的两个状态 “连上”， “未连上” 做组合 “状态” （注：实际中的状态应该比这个还要复杂，可能还会有“断开”、“错误”……等等状态）， 于是，我们可以把代码写成下面这样，合并上面的嵌套条件，对于每一种组合都做出判断。这样一来，逻辑就会非常的干净和清楚。</p>
+<pre class="brush: cpp; title: ; notranslate">int ConnectPeer2Peer(Conn *pA, Conn* pB, Manager *manager)
+{
+    if ( pA-&gt;isConnected() ) {
+        manager-&gt;Prepare(pA);
+    }
+
+    if ( pB-&gt;isConnected() ) {
+        manager-&gt;Prepare(pB);
+    }
+
+    // pA = YES &amp;&amp; pB = NO
+    if (pA-&gt;isConnected() &amp;&amp; ! pB-&gt;isConnected()  ) {
+        pA-&gt;Write(&quot;Peer is not Ready, waiting&quot;);
+        return S_RETRY;
+    // pA = NO &amp;&amp; pB = YES
+    }else if ( !pA-&gt;isConnected() &amp;&amp; pB-&gt;isConnected() ) {
+        pB-&gt;Write(&quot;Peer is not Ready, waiting&quot;);
+        return S_RETRY;
+    // pA = YES &amp;&amp; pB = YES
+    }else if (pA-&gt;isConnected() &amp;&amp; pB-&gt;isConnected()  ) {
+        if ( ! manager-&gt;ConnectTogther(pA, pB) ) {
+            return S_ERROR;
+        }
+        pA-&gt;Write(&quot;connected&quot;);
+        pB-&gt;Write(&quot;connected&quot;);
+        return S_OK;
+    }
+
+    // pA = NO, pB = NO
+    pA-&gt;Close();
+    pB-&gt;Close();
+    return S_ERROR;
+}</pre>
+<h4>延伸思考</h4>
+<p>对于 <code>if-else</code> 语句来说，一般来说，就是检查两件事：<strong>错误</strong> 和 <strong>状态</strong>。</p>
+<h5>检查错误</h5>
+<p>对于检查错误来说，使用 Guard Clauses 会是一种标准解，但我们还需要注意下面几件事：</p>
+<p style="padding-left: 30px;">1）当然，出现错误的时候，还会出现需要释放资源的情况。你可以使用 <code>goto fail;</code> 这样的方式，但是最优雅的方式应该是C++面向对象式的 RAII 方式。</p>
+<p style="padding-left: 30px;">2）以错误码返回是一种比较简单的方式，这种方式有很一些问题，比如，如果错误码太多，判断出错的代码会非常复杂，另外，正常的代码和错误的代码会混在一起，影响可读性。所以，在更为高组的语言中，使用 <code>try-catch</code> 异常捕捉的方式，会让代码更为易读一些。</p>
+<h5>检查状态</h5>
+<p>对于检查状态来说，实际中一定有更为复杂的情况，比如下面几种情况：</p>
+<p style="padding-left: 30px;">1）像TCP协议中的两端的状态变化。</p>
+<p style="padding-left: 30px;">2）像shell各个命令的命令选项的各种组合。</p>
+<p style="padding-left: 30px;">3）像游戏中的状态变化（一棵非常复杂的状态树）。</p>
+<p style="padding-left: 30px;">4）像语法分析那样的状态变化。</p>
+<p>对于这些复杂的状态变化，其本上来说，你需要先定义一个状态机，或是一个子状态的组合状态的查询表，或是一个状态查询分析树。</p>
+<p><strong>写代码时，代码的运行中的控制状态或业务状态是会让你的代码流程变得混乱的一个重要原因，重构“箭头型”代码的一个很重要的工作就是重新梳理和描述这些状态的变迁关系</strong>。</p>
+<h4>总结</h4>
+<p>好了，下面总结一下，把“箭头型”代码重构掉的几个手段如下：</p>
+<p>1）<strong>使用 Guard Clauses </strong>。 尽可能的让出错的先返回， 这样后面就会得到干净的代码。</p>
+<p>2）<strong>把条件中的语句块抽取成函数</strong>。 有人说：“如果代码不共享，就不要抽取成函数！”，持有这个观点的人太死读书了。函数是代码的封装或是抽象，并不一定用来作代码共享使用，函数用于屏蔽细节，让其它代码耦合于接口而不是细节实现，这会让我们的代码更为简单，简单的东西都能让人易读也易维护，<strong>写出让人易读易维护的代码才是重构代码的初衷</strong>！</p>
+<p>3）<strong>对于出错处理，使用try-catch异常处理和<a href="http://stackoverflow.com/questions/2321511/what-is-meant-by-resource-acquisition-is-initialization-raii" target="_blank">RAII机制</a></strong>。返回码的出错处理有很多问题，比如：A) 返回码可以被忽略，B) 出错处理的代码和正常处理的代码混在一起，C) 造成函数接口污染，比如像atoi()这种错误码和返回值共用的糟糕的函数。</p>
+<p>4）<strong>对于多个状态的判断和组合，如果复杂了，可以使用“组合状态表”，或是状态机加Observer的状态订阅的设计模式</strong>。这样的代码即解了耦，也干净简单，同样有很强的扩展性。</p>
+<p>5） <strong>重构“箭头型”代码其实是在帮你重新梳理所有的代码和逻辑，这个过程非常值得为之付出</strong>。重新整思路去想尽一切办法简化代码的过程本身就可以让人成长。</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" id="wp_rp_first"><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-12052" data-post-type="none" ><small class="wp_rp_publish_date">2014年10月23日</small> <a href="http://coolshell.cn/articles/12052.html" class="wp_rp_title">Leetcode 编程训练</a></li><li data-position="1" data-poid="in-11265" data-post-type="none" ><small class="wp_rp_publish_date">2014年03月20日</small> <a href="http://coolshell.cn/articles/11265.html" class="wp_rp_title">Python修饰器的函数式编程</a></li><li data-position="2" data-poid="in-8387" data-post-type="none" ><small class="wp_rp_publish_date">2012年10月14日</small> <a href="http://coolshell.cn/articles/8387.html" class="wp_rp_title">Bret Victor &#8211; Learnable Programming</a></li><li data-position="3" data-poid="in-3723" data-post-type="none" ><small class="wp_rp_publish_date">2011年02月28日</small> <a href="http://coolshell.cn/articles/3723.html" class="wp_rp_title">（麻省理工免费课程）计算机科学和编程导论</a></li><li data-position="4" data-poid="in-5201" data-post-type="none" ><small class="wp_rp_publish_date">2011年08月16日</small> <a href="http://coolshell.cn/articles/5201.html" class="wp_rp_title">重构代码的7个阶段</a></li><li data-position="5" data-poid="in-4875" data-post-type="none" ><small class="wp_rp_publish_date">2011年06月20日</small> <a href="http://coolshell.cn/articles/4875.html" class="wp_rp_title">一个空格引发的惨剧</a></li><li data-position="6" data-poid="in-11432" data-post-type="none" ><small class="wp_rp_publish_date">2014年04月12日</small> <a href="http://coolshell.cn/articles/11432.html" class="wp_rp_title">从Code Review 谈如何做技术</a></li><li data-position="7" data-poid="in-1218" data-post-type="none" ><small class="wp_rp_publish_date">2009年08月04日</small> <a href="http://coolshell.cn/articles/1218.html" class="wp_rp_title">简单实用的Code Review工具</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17757.html/feed</wfw:commentRss>
+		<slash:comments>28</slash:comments>
+		</item>
+		<item>
+		<title>AWS 的 S3 故障回顾和思考</title>
+		<link>http://coolshell.cn/articles/17737.html</link>
+		<comments>http://coolshell.cn/articles/17737.html#comments</comments>
+		<pubDate>Fri, 03 Mar 2017 06:20:03 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[业界新闻]]></category>
+		<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[Amazon S3]]></category>
+		<category><![CDATA[AWS]]></category>
+		<category><![CDATA[Design]]></category>
+		<category><![CDATA[High Availability]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17737</guid>
+		<description><![CDATA[继Gitlab的误删除数据事件没几天，“不沉航母” AWS S3 （Simple Storage Service）几天前也“沉”了4个小时，墙外的半个互联网也跟...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17737.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright wp-image-17738" src="http://coolshell.cn//wp-content/uploads/2017/03/Amazon-Web-Services-Down.png" width="360" height="197" srcset="http://coolshell.cn//wp-content/uploads/2017/03/Amazon-Web-Services-Down.png 553w, http://coolshell.cn//wp-content/uploads/2017/03/Amazon-Web-Services-Down-300x164.png 300w, http://coolshell.cn//wp-content/uploads/2017/03/Amazon-Web-Services-Down-494x270.png 494w" sizes="(max-width: 360px) 100vw, 360px" />继<a href="http://coolshell.cn/articles/17680.html" target="_blank">Gitlab的误删除数据事件</a>没几天，“不沉航母” AWS S3 （Simple Storage Service）几天前也“沉”了4个小时，墙外的半个互联网也跟着挂了。如约，按 AWS 惯例，AWS今天给出了一个简单的故障报告《<span class="s1"><a href="https://aws.amazon.com/cn/message/41926/" target="_blank">Summary of the Amazon S3 Service Disruption in the Northern Virginia (US-EAST-1) Region</a>》。这个故障和简单来说和Gitlab一样，也是人员误操作。先简单的说一下这份报中说了什么。</span></p>
+<h4>故障原因</h4>
+<p>简单来说，这天，有一个 AWS 工程师在调查 <span class="s1">Northern Virginia (US-EAST-1) Region 上 S3 的一个和账务系统相关的问题，这个问题是S3的账务系统变慢了（我估计这个故障在Amazon里可能是Sev2级，Sev2级的故障在Amazon算是比较大的故障，需要很快解决），Oncall的开发工程师（注：Amazon的运维都是由开发工程师来干的，所以Amazon内部嬉称SDE-Software Developer Engineer 为 Someone Do Everything）想移除一个账务系统里的一个子系统下的一些少量的服务器（估计这些服务器上有问题，所以想移掉后重新部署），结果呢，有一条命令搞错了，导致了移除了大量的S3的控制系统。包括两个很重要的子系统：</span></p>
+<p><span id="more-17737"></span></p>
+<p style="padding-left: 30px;">1）<strong>一个是S3的对象索引服务（Index）</strong>，其中存储了S3对象的metadata和位置信息。这个服务也提供了所有的 GET，LIST，PUT 和DELETE请求。</p>
+<p style="padding-left: 30px;">2）<strong>一个是S3的位置服务系统（Placement）</strong>，这个服务提供对象的存储位置和索引服务的系统。这个系统主要是用于处理PUT新对象请求。</p>
+<p>这就是为什么S3不可访问的原因。</p>
+<p>在后面，AWS也说明了一下故障恢复的过程，其中重点提到了这点——</p>
+<p style="padding-left: 30px;">虽然整个S3的是做过充分的故障设计的（注：AWS的七大Design Principle 之一 Design for Failure）—— 就算是最核心的组件或服务出问题了，系统也能恢复。但是，可能是在过去的日子里 S3 太稳定了，所以，AWS 在很长很长一段时间内都没有重启过 S3 的核心服务，而过去这几年，S3 的数据对象存储级数级的成长（S3存了什么样数量级的对象，因为在Amazon工作过，所以多大概知道是个什么数量级，这里不能说，不过，老实说，很惊人的），所以，这两个核心服务在启动时要重建并校验对象索引元数据的完整性，这个过程没想到花了这么长的时候。而Placement服务系统依赖于Index 服务，所以花了更长的时间。</p>
+<p>了解过系统底层的技术人员应该都知道这两个服务有多重要，简而言之，这两个系统就像是Unix/Linux文件系统中的inode，或是像HDFS里的node name，如果这些元数据丢失，那么，用户的所有数据基本上来说就等于全丢了。</p>
+<p>而要恢复索引系统，就像你的操作系统从异常关机后启动，文件系统要做系统自检那样，硬盘越大，文件越多，这个过程就越慢。</p>
+<p>另外，这次，AWS没有使用像以前那样 Outage 的故障名称，用的是 “Increased Error Rate” 这样的东西。我估计是没有把所有这两个服务删除完，估计有些用户是可以用的，有的用户是则不行了。</p>
+<h4>后续改进</h4>
+<p>在这篇故障简报中，AWS 也提到了下面的这些改进措施——</p>
+<p>1）<strong>改进运维操作工具</strong>。对于此次故障的运维工具，有下面改进：</p>
+<ul>
+<li><strong>让删除服务这个操作变慢一些</strong>（陈皓注：这样错了也可以有时间反悔，相对于一个大规模的分布式系统，这招还是很不错的，至少在系统报警时有也可以挽救）</li>
+</ul>
+<ul>
+<li><strong>加上一个最小资源数限制的SafeGuard</strong>（陈皓注：就是说，任何服务在运行时都应该有一个最小资源数，分布式集群控制系统会强行维护服务正常运行的最小的一个资源数）</li>
+</ul>
+<ul>
+<li>举一反三，Review所有和其它的运维工具，保证他们也相关的检查。</li>
+</ul>
+<p>2）<strong>改进恢复过程。</strong>对于恢复时间过长的问题，有如下改进：</p>
+<ul>
+<li><strong>分解现有厚重的重要服务成更小的单元</strong>（在 AWS，Service是大服务，小服务被称之为 Cell），AWS 会把这几个重要的服务重构成 Cell服务。（陈皓注：这应该就是所谓的“微服务”了吧）。这样，服务粒度变小，重启也会快一些，而且还可以减少故障面（原文：blast radius &#8211; 爆炸半径）</li>
+</ul>
+<ul>
+<li><strong>今年内完成对 Index 索引服务的分区计划</strong>。</li>
+</ul>
+<p>&nbsp;</p>
+<h4>相关思考</h4>
+<p>下面是我对这一故障的相关思考——</p>
+<p>0）<strong>太喜欢像Gitlab和AWS这样的故障公开了</strong>，那怕是一个自己人为的低级错误。不掩盖，不文过饰非，透明且诚恳。Cool!</p>
+<p>1）这次事件，还好没有丢失这么重要的数据，不然的话，将是灾难性的。</p>
+<p>2）另外，面对在 US-EASE-1 这个老牌 Region 上的海量的对象，而且能在几个小时内恢复，很不容易了。</p>
+<p>3）这个事件，再次映证了我在《<a href="http://coolshell.cn/articles/17459.html">关于高可用的系统</a>》中提到的观点：<strong>一个系统的高可用的因素很多，不仅仅只是系统架构，更重要的是——高可用运维</strong>。</p>
+<p>4）<strong>对于高可用的运维，平时的故障演习是很重要的。</strong>AWS 平时应该没有相应的故障演习，所以导致要么长期不出故障，一出就出个大的让你措手不及。这点，Facebook就好一些，他们每个季度扔个骰子，随机关掉一个IDC一天。Netflix 也有相关的 Chaos Monkey，我以前在的路透每年也会做一次大规模的故障演练——灾难演习。</p>
+<p>5）AWS对于后续的改进可以看出他的技术范儿。可以看到其改进方案是用技术让自己的系统更为的高可用。然后，对比国内的公司对于这样的故障，基本上会是下面这样的画风：</p>
+<p style="padding-left: 30px;">a）加上更多更为严格的变更和审批流程，</p>
+<p style="padding-left: 30px;">b）使用限制更多的权限系统和审批系统</p>
+<p style="padding-left: 30px;">c）使用更多的人来干活（一个人干事，另一个人在旁边看）</p>
+<p style="padding-left: 30px;">d）使用更为厚重的测试和发布过程</p>
+<p style="padding-left: 30px;">e）惩罚故障人，用价值观教育工程师。</p>
+<p>这还是我老生长谈的那句话——<strong>如果你是一个技术公司，你就会更多的相信技术而不是管理。相信技术会用技术来解决问题，相信管理，那就只会有制度、流程和价值观来解决问题</strong>。（注意：这里我并没有隔离技术和管理，只是更为倾向于用技术解决问题）</p>
+<p><strong>最后，你是要建一个 “高可用的技术系统” ，还是一个 “高用的管理系统”？ ;-)</strong></p>
+<p>（全文完）</p>
+<p>&nbsp;</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-4601" data-post-type="none" ><small class="wp_rp_publish_date">2011年04月27日</small> <a href="http://coolshell.cn/articles/4601.html" class="wp_rp_title">关于Amazon云宕机的网贴收集</a></li><li data-position="1" data-poid="in-17680" data-post-type="none" ><small class="wp_rp_publish_date">2017年02月02日</small> <a href="http://coolshell.cn/articles/17680.html" class="wp_rp_title">从Gitlab误删除数据库想到的</a></li><li data-position="2" data-poid="in-17459" data-post-type="none" ><small class="wp_rp_publish_date">2016年08月21日</small> <a href="http://coolshell.cn/articles/17459.html" class="wp_rp_title">关于高可用的系统</a></li><li data-position="3" data-poid="in-455" data-post-type="none" ><small class="wp_rp_publish_date">2009年04月12日</small> <a href="http://coolshell.cn/articles/455.html" class="wp_rp_title">9个强大免费的PHP库</a></li><li data-position="4" data-poid="in-3192" data-post-type="none" ><small class="wp_rp_publish_date">2010年10月18日</small> <a href="http://coolshell.cn/articles/3192.html" class="wp_rp_title">一些非常不错的资料</a></li><li data-position="5" data-poid="in-6775" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月09日</small> <a href="http://coolshell.cn/articles/6775.html" class="wp_rp_title">Bret Victor &#8211; Inventing on Principle</a></li><li data-position="6" data-poid="in-5444" data-post-type="none" ><small class="wp_rp_publish_date">2011年09月08日</small> <a href="http://coolshell.cn/articles/5444.html" class="wp_rp_title">千万不要把 bool 设计成函数参数</a></li><li data-position="7" data-poid="in-6790" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月13日</small> <a href="http://coolshell.cn/articles/6790.html" class="wp_rp_title">多版本并发控制(MVCC)在分布式系统中的应用</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17737.html/feed</wfw:commentRss>
+		<slash:comments>42</slash:comments>
+		</item>
+		<item>
+		<title>从Gitlab误删除数据库想到的</title>
+		<link>http://coolshell.cn/articles/17680.html</link>
+		<comments>http://coolshell.cn/articles/17680.html#comments</comments>
+		<pubDate>Thu, 02 Feb 2017 08:11:28 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[技术新闻]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[系统架构]]></category>
+		<category><![CDATA[Design]]></category>
+		<category><![CDATA[Gitlab]]></category>
+		<category><![CDATA[High Availability]]></category>
+		<category><![CDATA[Programmer]]></category>
+		<category><![CDATA[分布式]]></category>
+		<category><![CDATA[程序员]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17680</guid>
+		<description><![CDATA[昨天，Gitlab.com发生了一个大事，某同学误删了数据库，这个事看似是个低级错误，不过，因为Gitlab把整个过程的细节都全部暴露出来了，所以，可以看到很多...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17680.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright wp-image-17685" src="http://coolshell.cn//wp-content/uploads/2017/02/gitlab-600.jpg" width="300" height="215" srcset="http://coolshell.cn//wp-content/uploads/2017/02/gitlab-600.jpg 439w, http://coolshell.cn//wp-content/uploads/2017/02/gitlab-600-300x215.jpg 300w, http://coolshell.cn//wp-content/uploads/2017/02/gitlab-600-377x270.jpg 377w" sizes="(max-width: 300px) 100vw, 300px" />昨天，Gitlab.com发生了一个大事，某同学误删了数据库，这个事看似是个低级错误，不过，因为Gitlab把整个过程的细节都全部暴露出来了，所以，可以看到很多东西，而对于类似这样的事情，我自己以前也干过，而在最近的两公司中我也见过（Amazon中见过一次，阿里中见过至少四次），正好通过这个事来说说一下自己的一些感想和观点吧。<strong>我先放个观点：你觉得有备份系统就不会丢数据了吗？</strong></p>
+<h4>事件回顾</h4>
+<p>整个事件的回顾Gitlab.com在第一时间就放到了<a href="https://docs.google.com/document/d/1GCK53YDcBWQveod9kfzW-VCxIABGiryG7_z_6jHdVik/pub" target="_blank">Google Doc上</a>，事后，又发了<a href="https://about.gitlab.com/2017/02/01/gitlab-dot-com-database-incident/" target="_blank">一篇Blog</a>来说明这个事，在这里，我简单的回顾一下这个事件的过程。</p>
+<p>首先，一个叫YP的同学在给gitlab的线上数据库做一些负载均衡的工作，在做这个工作时的时候突发了一个情况，Gitlab被DDoS攻击，数据库的使用飙高，在block完攻击者的IP后，发现有个staging的数据库(db2.staging)已经落后生产库4GB的数据，于是YP同学在Fix这个staging库的同步问题的时候，发现db2.staging有各种问题都和主库无法同步，在这个时候，YP同学已经工作的很晚了，在尝试过多个方法后，发现db2.staging都hang在那里，无法同步，于是他想把db2.staging的数据库删除了，这样全新启动一个新的复制，结果呢，删除数据库的命令错误的敲在了生产环境上（db1.cluster），结果导致整个生产数据库被误删除。（<strong>陈皓注：这个失败基本上就是 “工作时间过长” + “在多数终端窗口中切换中迷失掉了”</strong>）</p>
+<p><span id="more-17680"></span></p>
+<p>在恢复的过程中，他们发现只有db1.staging的数据库可以用于恢复，而其它的5种备份机制都不可用，第一个是数据库的同步，没有同步webhook，第二个是对硬盘的快照，没有对数据库做，第三个是用pg_dump的备份，发现版本不对（用9.2的版本去dump 9.6的数据）导致没有dump出数据，第四个S3的备份，完全没有备份上，第五个是相关的备份流程是问题百出的，只有几个粗糙的人肉的脚本和糟糕的文档，也就是说，不但是是人肉的，而且还是完全不可执行的。（<strong>陈皓注：就算是这些备份机制都work，其实也有问题，因为这些备份大多数基本上都是24小时干一次，所以，要从这些备份恢复也一定是是要丢数据的了，只有第一个数据库同步才会实时一些</strong>）</p>
+<p>最终，gitlab从db1.staging上把6个小时前的数据copy回来，结果发现速度非常的慢，备份结点只有60Mbits/S，拷了很长时间（<strong>陈皓注：为什么不把db1.staging给直接变成生产机？因为那台机器的性能很差</strong>）。数据现在的恢复了，不过，因为恢复的数据是6小时前的，所以，有如下的数据丢失掉了：</p>
+<ul class="ul1">
+<li class="li1"><span class="s2">粗略估计，有4613 的项目， 74 forks,  和 350 imports 丢失了；但是，因为Git仓库还在，所以，可以从Git仓库反向推导数据库中的数据，但是，项目中的issues等就完全丢失了。</span></li>
+<li class="li1"><span class="s2">大约有±4979 提交记录丢失了（陈皓注：估计也可以用git仓库中反向恢复）。</span></li>
+<li class="li1"><span class="s2">可能有 707  用户丢失了，这个数据来自Kibana的日志。</span></li>
+<li class="li2"><span class="s4">在1月31日17:20 后的Webhooks 丢失了。</span></li>
+</ul>
+<p>因为Gitlab把整个事件的细节公开了出来，所以，也得到了很多外部的帮助，2nd Quadrant的CTO &#8211; <span class="s1"><a href="https://www.linkedin.com/in/simonat2ndquadrantdotcom" target="_blank">Simon Riggs</a> 在他的blog上也发布文章 <a href="http://blog.2ndquadrant.com/dataloss-at-gitlab/" target="_blank">Dataloss at Gitlab </a>给了一些非常不错的建议：</span></p>
+<ul>
+<li>关于PostgreSQL 9.6的数据同步hang住的问题，可能有一些Bug，正在fix中。</li>
+<li>PostgreSQL有4GB的同步滞后是正常的，这不是什么问题。</li>
+<li>正常的停止从结点，会让主结点自动释放WALSender的链接数，所以，不应该重新配置主结点的 max_wal_senders 参数。但是，停止从结点时，主结点的复数连接数不会很快的被释放，而新启动的从结点又会消耗更多的链接数。他认为，Gitlab配置的32个链接数太高了，通常来说，2到4个就足够了。</li>
+<li>另外，之前gitlab配置的max_connections=8000太高了，现在降到2000个是合理的。</li>
+<li>pg_basebackup 会先在主结点上建一个checkpoint，然后再开始同步，这个过程大约需要4分钟。</li>
+<li>手动的删除数据库目录是非常危险的操作，这个事应该交给程序来做。推荐使用刚release 的 <a href="https://www.2ndquadrant.com/en/resources/repmgr/" target="_blank">repmgr</a></li>
+<li>恢复备份也是非常重要的，所以，也应该用相应的程序来做。推荐使用 <a href="https://www.2ndquadrant.com/en/resources/barman/" target="_blank">barman</a> （其支持S3）</li>
+<li>测试备份和恢复是一个很重要的过程。</li>
+</ul>
+<p>看这个样子，估计也有一定的原因是——Gitlab的同学对PostgreSQL不是很熟悉。</p>
+<p>随后，Gitlab在其网站上也开了一系列的issues，其issues列表在这里 <a href="https://gitlab.com/gitlab-com/www-gitlab-com/issues/1108" target="_blank">Write post-mortem</a> (这个列表可能还会在不断更新中)</p>
+<ul class="ul1">
+<li class="li1"><span class="s1"><span class="s2"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1094">infrastructure#1094</a> &#8211; Update PS1 across all hosts to more clearly differentiate between hosts and environments</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1095">infrastructure#1095</a> &#8211; Prometheus monitoring for backups</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1096">infrastructure#1096</a> &#8211; Set PostgreSQL&#8217;s max_connections to a sane value</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1097">infrastructure#1097</a> &#8211; Investigate Point in time recovery &amp; continuous archiving for PostgreSQL</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1098">infrastructure#1098</a> &#8211; Hourly LVM snapshots of the production databases</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1099">infrastructure#1099</a> &#8211; Azure disk snapshots of production databases</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1100">infrastructure#1100</a> &#8211; Move staging to the ARM environment</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1101">infrastructure#1101</a> &#8211; Recover production replica(s)</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1102">infrastructure#1102</a> &#8211; Automated testing of recovering PostgreSQL database backups</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1103">infrastructure#1103</a> &#8211; Improve PostgreSQL replication documentation/runbooks</span></span></li>
+<li class="li1"><span class="s3"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1104">infrastructure#1104</a> &#8211; Kick out SSH users inactive for N minutes</span></span></li>
+<li class="li2"><span class="s5"><span class="s4"><a href="https://gitlab.com/gitlab-com/infrastructure/issues/1105">infrastructure#1105</a> &#8211; Investigate pgbarman for creating PostgreSQL backups</span></span></li>
+</ul>
+<p>从上面的这个列表中，我们可以看到一些改进措施了。挺好的，不过我觉得还不是很够。</p>
+<h4>相关的思考</h4>
+<p>因为类似这样的事，我以前也干过（误删除过数据库，在多个终端窗口中迷失掉了自己所操作的机器……），而且我在amazon里也见过一次，在阿里内至少见过四次以上（在阿里人肉运维的误操作的事故是我见过最多的），但是我无法在这里公开分享，私下可以分享。在这里，我只想从非技术和技术两个方面分享一下我的经验和认识。</p>
+<h5>技术方面</h5>
+<p><strong>人肉运维</strong></p>
+<p>一直以来，我都觉得直接到生产线上敲命令是一种非常不好的习惯。我认为，<strong>一个公司的运维能力的强弱和你上线上环境敲命令是有关的，你越是喜欢上线敲命令你的运维能力就越弱，越是通过自动化来处理问题，你的运维能力就越强</strong>。理由如下：</p>
+<p style="padding-left: 30px;">其一，如果说对代码的改动都是一次发布的话，那么，对生产环境的任何改动（包括硬件、操作系统、网络、软件配置……），也都算是一次发布。那么这样的发布就应该走发布系统和发布流程，要被很好的测试、上线和回滚计划。关键是，走发布过程是可以被记录、追踪和回溯的，而在线上敲命令是完全无法追踪的。没人知道你敲了什么命令。</p>
+<p style="padding-left: 30px;">其二，真正良性的运维能力是——人管代码，代码管机器，而不是人管机器。你敲了什么命令没人知道，但是你写个工具做变更线上系统，这个工具干了什么事，看看工具的源码就知道了。</p>
+<p>另外、有人说，以后不要用rm了，要用mv，还有人说，以后干这样的事时，一个人干，另一个人在旁边看，还有人说，要有一个checklist的强制流程做线上的变更，还有人说要增加一个权限系统。我觉得，这些虽然可以work，但是依然不好，再由如下：</p>
+<p style="padding-left: 30px;">其一、如果要解决一个事情需要加更多的人来做的事，那这事就做成劳动密集型了。今天我们的科技就是在努力消除人力成本，而不是在增加人力成本。而做为一个技术人员，解决问题的最好方式是努力使用技术手段，而不是使用更多的人肉手段。<strong>人类区别于动物的差别就是会发明和使用现代化的工具，而不是使用更多的人力</strong>。另外，<strong>这不仅仅因为是，人都是会有这样或那样的问题（疲惫、情绪化、急燥、冲动……），而机器是单一无脑不知疲惫的，更是因为，机器干活的效率和速度是比人肉高出N多倍的</strong>。</p>
+<p style="padding-left: 30px;">其二、增加一个权限系统或是别的一个watch dog的系统完全是在开倒车，权限系统中的权限谁来维护和审批？不仅仅是因为多出来的系统需要多出来的维护，关键是这个事就没有把问题解决在root上。除了为社会解决就业问题，别无好处，故障依然会发生，有权限的人一样会误操作。对于Gitlab这个问题，正如2nd Quadrant的CTO建议的那样，你需要的是一个自动化的备份和恢复的工具，而不是一个权限系统。</p>
+<p style="padding-left: 30px;">其三、像使用mv而不rm，搞一个checklist和一个更重的流程，更糟糕。这里的逻辑很简单，因为，1）这些规则需要人去学习和记忆，本质上来说，你本来就不相信人，所以你搞出了一些规则和流程，而这些规则和流程的执行，又依赖于人，换汤不换药，2）另外，<strong>写在纸面上的东西都是不可执行的，可以执行的就是只有程序，所以，为什么不把checklist和流程写成代码呢</strong>？（你可能会说程序也会犯错，是的，程序的错误是consistent，而人的错误是inconsistent）</p>
+<p>最关键的是，<strong>数据丢失有各种各样的情况，不单单只是人员的误操作，比如，掉电、磁盘损坏、中病毒等等，在这些情况下，你设计的那些想流程、规则、人肉检查、权限系统、checklist等等统统都不管用了，这个时候，你觉得应该怎么做呢？是的，你会发现，你不得不用更好的技术去设计出一个高可用的系统！别无它法。</strong></p>
+<h4>关于备份</h4>
+<p>一个系统是需要做数据备份的，但是，你会发现，<strong>Gitlab这个事中，就算所有的备份都可用，也不可避免地会有数据的丢失，或是也会有很多问题</strong>。理由如下：</p>
+<p style="padding-left: 30px;">1）备份通常来说都是周期性的，所以，如果你的数据丢失了，从你最近的备份恢复数据里，从备份时间到故障时间的数据都丢失了。</p>
+<p style="padding-left: 30px;">2）备份的数据会有版本不兼容的问题。比如，在你上次备份数据到故障期间，你对数据的scheme做了一次改动，或是你对数据做了一些调整，那么，你备份的数据就会和你线上的程序出现不兼容的情况。</p>
+<p style="padding-left: 30px;">3）有一些公司或是银行有灾备的数据中心，但是灾备的数据中心没有一天live过。等真正灾难来临需要live的时候，你就会发现，各种问题让你live不起来。你可以读一读几年前的这篇报道好好感受一下《<a href="http://finance.sina.com.cn/money/bank/20140804/091219903553.shtml" target="_blank">以史为鉴 宁夏银行7月系统瘫痪最新解析</a>》</p>
+<p>所以，在灾难来临的时候，你会发现你所设计精良的“备份系统”或是“灾备系统”就算是平时可以工作，但也会导致数据丢失，而且可能长期不用的备份系统很难恢复（比如应用、工具、数据的版本不兼容等问题）。</p>
+<p>我之前写过一篇《<a href="http://coolshell.cn/articles/10910.html" target="_blank">分布式系统的事务处理</a>》，你还记得下面这张图吗？看看 Data Loss 那一行的，在Backups, Master/Slave 和 Master/Master的架构下，都是会丢的。</p>
+<p><img class="aligncenter size-full wp-image-10942" src="http://coolshell.cn//wp-content/uploads/2014/01/Transaction-Across-DataCenter.jpg" alt="" width="566" height="255" srcset="http://coolshell.cn//wp-content/uploads/2014/01/Transaction-Across-DataCenter.jpg 566w, http://coolshell.cn//wp-content/uploads/2014/01/Transaction-Across-DataCenter-300x135.jpg 300w" sizes="(max-width: 566px) 100vw, 566px" /></p>
+<p>所以说，<strong>如果你要让你的备份系统随时都可以用，那么你就要让它随时都Live着</strong>，而随时都Live着的多结点系统，基本上就是一个分布式的高可用的系统。因为<strong>，数据丢失的原因有很多种，比如掉电、磁盘损坏、中病毒等等，而那些流程、规则、人肉检查、权限系统、checklist等等都只是让人不要误操作，都不管用，这个时候，你不得不用更好的技术去设计出一个高可用的系统！别无它法。（重要的事，得再说一篇）</strong></p>
+<p>另外，你可以参看我的另一篇《<a href="http://coolshell.cn/articles/17459.html" target="_blank">关于高可用系统</a>》，这篇文章中以MySQL为例，数据库的replication也只能达到 两个9。</p>
+<p><strong>AWS 的 S3 的的高可用是4个加11个9的持久性（</strong>所谓11个9的持久性durability，AWS是这样定义的，如果你存了1万个对象，那么丢一个的时间是1000万年<strong>），这意味着，不仅仅只是硬盘坏，机器掉电，整个机房挂了，其保证可以承受有两个设施的数据丢失，数据还是可用的。试想，如果你把数据的可用性通过技术做到了这个份上，那么，你还怕被人误删一个结点上的数据吗？</strong></p>
+<h5>非技术方面</h5>
+<p><strong>故障反思</strong></p>
+<p>一般说来，故障都需要反思，在Amazon，S2以上的故障都需要写COE（Correction of Errors），其中一节就是需要Ask 5 Whys，我发现在Gitlab的故障回顾的blog中第一段中也有说要在今天写个Ask 5 Whys。关于Ask 5 Whys，其实并不是亚马逊的玩法，这还是算一个业内常用的玩法，也就是说不断的为自己为为什么，直到找到问题的概本原因，这会逼着所有的当事人去学习和深究很多东西。在Wikipedia上有相关的词条 <a href="https://en.wikipedia.org/wiki/5_Whys" target="_blank">5 Whys</a>，其中罗列了14条规则：</p>
+<ol>
+<li>你需要找到正确的团队来完成这个故障反思。</li>
+<li>使用纸或白板而不是电脑。</li>
+<li>写下整个问题的过程，确保每个人都能看懂。</li>
+<li>区别原因和症状。</li>
+<li>特别注意因果关系。</li>
+<li>说明Root Cause以及相关的证据。</li>
+<li>5个为什么的答案需要是精确的。</li>
+<li>寻找问题根源的步骤，而不是直接跳到结论。</li>
+<li>要基础客观的事实、数据和知识。</li>
+<li>评估过程而不是人。</li>
+<li>千万不要把“人为失误”或是“工作不注意”当成问题的根源。</li>
+<li>培养信任和真诚的气氛和文化。</li>
+<li>不断的问“为什么”直到问题的根源被找到。这样可以保证同一个坑不会掉进去两次。<sup id="cite_ref-7" class="reference"></sup></li>
+<li>当你给出“为什么”的答案时，你应该从用户的角度来回答。</li>
+</ol>
+<p><strong>工程师文化</strong></p>
+<p>上述的这些观点，其实，我在我的以住的博客中都讲过很多遍了，你可以参看《<a href="http://coolshell.cn/articles/17497.html" target="_blank">什么是工程师文化？</a>》以及《<a href="http://coolshell.cn/articles/11656.html" target="_blank">开发团队的效率</a>》。其实，说白了就是这么一个事——<strong>如果你是一个技术公司，你就会更多的相信技术而不是管理。相信技术会用技术来解决问题，相信管理，那就只会有制度、流程和价值观来解决问题</strong>。</p>
+<p>这个道理很简单，<strong>数据丢失有各种各样的情况，不单单只是人员的误操作，比如，掉电、磁盘损坏、中病毒等等，在这些情况下，你设计的那些流程、规则、人肉检查、权限系统、checklist等等统统都不管用，这个时候，你觉得应该怎么做呢？是的，你会发现，你不得不用更好的技术去设计出一个高可用的系统！别无它法。（重要的事得说三遍）</strong></p>
+<p><strong>事件公开</strong></p>
+<p>很多公司基本上都是这样的套路，首先是极力掩盖，如果掩盖不了了就开始撒谎，撒不了谎了，就“文过饰非”、“避重就轻”、“转移视线”。然而，面对危机的最佳方法就是——“多一些真诚，少一些套路”，<strong>所谓的“多一些真诚”的最佳实践就是——“透明公开所有的信息”</strong>，Gitlab此次的这个事给大家树立了非常好的榜样。AWS也会把自己所有的故障和细节都批露出来。</p>
+<p><strong>事情本来就做错了，而公开所有的细节，会让大众少很多猜测的空间，有利于抵制流言和黑公关，同时，还会赢得大众的理解和支持</strong>。看看Gitlab这次还去YouTube上直播整个修复过程，是件很了不起的事，大家可以到他们的blog上看看，对于这样的透明和公开，一片好评。</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-17459" data-post-type="none" ><small class="wp_rp_publish_date">2016年08月21日</small> <a href="http://coolshell.cn/articles/17459.html" class="wp_rp_title">关于高可用的系统</a></li><li data-position="1" data-poid="in-10910" data-post-type="none" ><small class="wp_rp_publish_date">2014年01月20日</small> <a href="http://coolshell.cn/articles/10910.html" class="wp_rp_title">分布式系统的事务处理</a></li><li data-position="2" data-poid="in-9949" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月05日</small> <a href="http://coolshell.cn/articles/9949.html" class="wp_rp_title">IoC/DIP其实是一种管理思想</a></li><li data-position="3" data-poid="in-6775" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月09日</small> <a href="http://coolshell.cn/articles/6775.html" class="wp_rp_title">Bret Victor &#8211; Inventing on Principle</a></li><li data-position="4" data-poid="in-17737" data-post-type="none" ><small class="wp_rp_publish_date">2017年03月03日</small> <a href="http://coolshell.cn/articles/17737.html" class="wp_rp_title">AWS 的 S3 故障回顾和思考</a></li><li data-position="5" data-poid="in-4811" data-post-type="none" ><small class="wp_rp_publish_date">2011年06月10日</small> <a href="http://coolshell.cn/articles/4811.html" class="wp_rp_title">软件真的好难做啊</a></li><li data-position="6" data-poid="in-5686" data-post-type="none" ><small class="wp_rp_publish_date">2011年10月25日</small> <a href="http://coolshell.cn/articles/5686.html" class="wp_rp_title">多些时间能少写些代码</a></li><li data-position="7" data-poid="in-5444" data-post-type="none" ><small class="wp_rp_publish_date">2011年09月08日</small> <a href="http://coolshell.cn/articles/5444.html" class="wp_rp_title">千万不要把 bool 设计成函数参数</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17680.html/feed</wfw:commentRss>
+		<slash:comments>48</slash:comments>
+		</item>
+		<item>
+		<title>Chrome开发者工具的小技巧</title>
+		<link>http://coolshell.cn/articles/17634.html</link>
+		<comments>http://coolshell.cn/articles/17634.html#comments</comments>
+		<pubDate>Thu, 19 Jan 2017 12:25:55 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[Web开发]]></category>
+		<category><![CDATA[编程工具]]></category>
+		<category><![CDATA[Chrome]]></category>
+		<category><![CDATA[CSS]]></category>
+		<category><![CDATA[HTML]]></category>
+		<category><![CDATA[Javascript]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17634</guid>
+		<description><![CDATA[Chrome的开发者工具是个很强大的东西，相信程序员们都不会陌生，不过有些小功能可能并不为大众所知，所以，写下这篇文章罗列一下可能你所不知道的功能，有的功能可能...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17634.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p>Chrome的开发者工具是个很强大的东西，相信程序员们都不会陌生，不过有些小功能可能并不为大众所知，所以，写下这篇文章罗列一下可能你所不知道的功能，有的功能可能会比较实用，有的则不一定，也欢迎大家补充交流。</p>
+<p>话不多话，我们开始。</p>
+<h4>代码格式化</h4>
+<p>有很多css/js的代码都会被 minify 掉，你可以点击代码窗口左下角的那个 <strong><code>{ }</code></strong>  标签，chrome会帮你给格式化掉。</p>
+<p><img class="aligncenter size-full wp-image-17640" src="http://coolshell.cn//wp-content/uploads/2017/01/pretty-code.gif" alt="" width="707" height="319" /></p>
+<p><span id="more-17634"></span></p>
+<h4>强制DOM状态</h4>
+<p>有些HTML的DOM是有状态的，比如&lt;a&gt; 标签，其会有 active，hover， focus，visited这些状态，有时候，我们的CSS会来定关不同状态的样式，在分析网页查看网页上DOM的CSS样式时，我们可以点击CSS样式上的 <strong><code>:hov</code></strong> 这个小按钮来强制这个DOM的状态。</p>
+<p>&nbsp;</p>
+<p><img class="aligncenter size-full wp-image-17641" src="http://coolshell.cn//wp-content/uploads/2017/01/state.gif" alt="" width="853" height="331" /></p>
+<p>&nbsp;</p>
+<h4>动画</h4>
+<p>现在的网页上都会有一些动画效果。在Chrome的开发者工具中，通过右上角的菜单中的 <code>More Tools</code> =&gt; <code>Animations</code> 呼出相关的选项卡。于是你就可以慢动作播放动画了（可以点选 <code>25%</code> 或 <code>10%</code>），然后，Chrome还可以帮你把动画录下来，你可以拉动动再画的过程，甚至可以做一些简单的修改。</p>
+<p>&nbsp;</p>
+<p><img class="aligncenter wp-image-17637" src="http://coolshell.cn//wp-content/uploads/2017/01/animation.gif" width="442" height="723" /></p>
+<h4>直接编辑网页</h4>
+<p>在你的 console 里 输入下面的命令：</p>
+<pre class="brush: jscript; title: ; notranslate">document.designMode = &quot;on&quot; </pre>
+<p>于是你就可以直接修改网页上的内容了。</p>
+<p>P.S. 下面这个抓屏中还演示了一个如何清空console的示例。你可以输入 clear() 或是 按 <code>Ctrl+L</code>（Windows下），<code>CMD + K</code> (Mac下)</p>
+<p><img class="aligncenter wp-image-17642" src="http://coolshell.cn//wp-content/uploads/2017/01/editor.gif" width="800" height="328" /></p>
+<p>&nbsp;</p>
+<h4>网络限速</h4>
+<p>你可以设置你的网络的访问速度来模拟一个网络很慢的情况。</p>
+<p><img class="aligncenter size-full wp-image-17644" src="http://coolshell.cn//wp-content/uploads/2017/01/custom-network-throttling-profiles.gif" alt="" width="707" height="319" /></p>
+<p>&nbsp;</p>
+<h4>复制HTTP请求</h4>
+<p>这个是我很喜欢 的一个功能，你可以在 network选项卡里，点击 XHR 过滤相关的Ajax请求，然后在相关的请求上点鼠标右键，在菜单中选择： <code>Copy</code> =&gt; <code>Copy as cURL</code>，然后就可以到你的命令行下去 执行 <code>curl</code> 的命令了。这个可以很容易做一些自动化的测试。</p>
+<p><img class="aligncenter wp-image-17645" src="http://coolshell.cn//wp-content/uploads/2017/01/curl.gif" width="800" height="328" /></p>
+<p>&nbsp;</p>
+<p><strong>友情提示：这个操作有可能会把你的个人隐私信息复制出去，比如你个人登录后的cookie。</strong></p>
+<h4>抓个带手机的图</h4>
+<p>这个可能有点无聊了，不过我觉得挺有意思的。</p>
+<p>在device显示中，先选择一个手机，然后在右上角选 <code>Show Device Frame</code>，然后你就看到手机的样子了，然后再到那个菜中中选 Capture snapshot，就可以抓下一个有手机样子的截图了。</p>
+<p><img class="aligncenter wp-image-17646" src="http://coolshell.cn//wp-content/uploads/2017/01/device.gif" width="700" height="404" /></p>
+<p>我抓的图如下（当然，不是所有的手机都有frame的）</p>
+<p><img class="aligncenter wp-image-17647 size-medium" src="http://coolshell.cn//wp-content/uploads/2017/01/coolshell.cn-iPhone-6-Plus-1-148x300.png" width="148" height="300" srcset="http://coolshell.cn//wp-content/uploads/2017/01/coolshell.cn-iPhone-6-Plus-1-148x300.png 148w, http://coolshell.cn//wp-content/uploads/2017/01/coolshell.cn-iPhone-6-Plus-1-768x1559.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/coolshell.cn-iPhone-6-Plus-1-505x1024.png 505w, http://coolshell.cn//wp-content/uploads/2017/01/coolshell.cn-iPhone-6-Plus-1-133x270.png 133w, http://coolshell.cn//wp-content/uploads/2017/01/coolshell.cn-iPhone-6-Plus-1.png 780w" sizes="(max-width: 148px) 100vw, 148px" /></p>
+<p>&nbsp;</p>
+<h4>设置断点</h4>
+<p>除了给Javascript的源代码上设置断点调试，你还可以：</p>
+<h5>给DOM设置断点</h5>
+<p>选中一个DOM，然后在右键菜单中选 Break on &#8230; 你可以看到如下三个选项：</p>
+<h4><img class="aligncenter wp-image-17665" src="http://coolshell.cn//wp-content/uploads/2017/01/break.dom_-1024x708.png" width="500" height="345" srcset="http://coolshell.cn//wp-content/uploads/2017/01/break.dom_-1024x708.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/break.dom_-300x207.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/break.dom_-768x531.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/break.dom_-391x270.png 391w, http://coolshell.cn//wp-content/uploads/2017/01/break.dom_.png 1152w" sizes="(max-width: 500px) 100vw, 500px" /></h4>
+<h5>给XHR和Event Lisener设置断点</h5>
+<p>在 Sources 面页中，你可以看到右边的那堆break points中，除了上面我们说的给DOM设置断点，你还可以给XHR和Event Listener设置断点，载图如下：</p>
+<p><img class="aligncenter wp-image-17666" src="http://coolshell.cn//wp-content/uploads/2017/01/breakpoints-834x1024.png" width="400" height="491" srcset="http://coolshell.cn//wp-content/uploads/2017/01/breakpoints-834x1024.png 834w, http://coolshell.cn//wp-content/uploads/2017/01/breakpoints-244x300.png 244w, http://coolshell.cn//wp-content/uploads/2017/01/breakpoints-768x943.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/breakpoints-220x270.png 220w, http://coolshell.cn//wp-content/uploads/2017/01/breakpoints.png 906w" sizes="(max-width: 400px) 100vw, 400px" /></p>
+<h4>关于Console中的技巧</h4>
+<h5>DOM操作</h5>
+<ul>
+<li>chrome会帮你buffer 5个你查看过的DOM对象，你可以直接在Console中用 $0, $1, $2, $3, $4来访问。</li>
+</ul>
+<ul>
+<li>你还可以使用像jQuery那样的语法来获得DOM对象，如：<code>$("#mydiv")</code></li>
+</ul>
+<ul>
+<li>你还可使用 <code>$$(".class")</code> 来选择所有满足条件的DOM对象。</li>
+</ul>
+<ul>
+<li>你可以使用 <code>getEventListeners($("selector"))</code> 来查看某个DOM对象上的事件（如下图所示）。</li>
+</ul>
+<p><img class="aligncenter wp-image-17656" src="http://coolshell.cn//wp-content/uploads/2017/01/events-geteventlisteners_expanded.png" width="642" height="223" srcset="http://coolshell.cn//wp-content/uploads/2017/01/events-geteventlisteners_expanded.png 842w, http://coolshell.cn//wp-content/uploads/2017/01/events-geteventlisteners_expanded-300x104.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/events-geteventlisteners_expanded-768x267.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/events-geteventlisteners_expanded-604x210.png 604w" sizes="(max-width: 642px) 100vw, 642px" /></p>
+<ul>
+<li>你还可以使用 <code>monitorEvents($("selector"))</code> 来监控相关的事件。比如：</li>
+</ul>
+<pre class="brush: jscript; title: ; notranslate">monitorEvents(document.body, &quot;click&quot;);</pre>
+<p><img class="aligncenter size-large wp-image-17661" src="http://coolshell.cn//wp-content/uploads/2017/01/monitor-events-1024x378.png" alt="" width="640" height="236" srcset="http://coolshell.cn//wp-content/uploads/2017/01/monitor-events-1024x378.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/monitor-events-300x111.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/monitor-events-768x283.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/monitor-events-604x223.png 604w, http://coolshell.cn//wp-content/uploads/2017/01/monitor-events.png 1302w" sizes="(max-width: 640px) 100vw, 640px" /></p>
+<h5>Console中的一些函数</h5>
+<p><strong>1）monitor函数</strong></p>
+<p>使用 monitor函数来监控一函数，如下面的示例</p>
+<p><img class="aligncenter wp-image-17657 size-medium" src="http://coolshell.cn//wp-content/uploads/2017/01/monitor-300x112.png" width="300" height="112" srcset="http://coolshell.cn//wp-content/uploads/2017/01/monitor-300x112.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/monitor-604x226.png 604w, http://coolshell.cn//wp-content/uploads/2017/01/monitor.png 706w" sizes="(max-width: 300px) 100vw, 300px" /></p>
+<p><strong>2）copy函数</strong></p>
+<p>copy函数可以把一个变量的值copy到剪贴板上。</p>
+<p><strong>3）inspect函数</strong></p>
+<p>inspect函数可以让你控制台跳到你需要查看的对象上。如：</p>
+<p><img class="aligncenter size-large wp-image-17662" src="http://coolshell.cn//wp-content/uploads/2017/01/inspect-1024x459.png" alt="" width="640" height="287" srcset="http://coolshell.cn//wp-content/uploads/2017/01/inspect-1024x459.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/inspect-300x135.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/inspect-768x345.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/inspect-602x270.png 602w, http://coolshell.cn//wp-content/uploads/2017/01/inspect.png 1364w" sizes="(max-width: 640px) 100vw, 640px" /></p>
+<p>更多的函数请参数官方文档 &#8211; <a href="https://developers.google.com/web/tools/chrome-devtools/console/command-line-reference" target="_blank">Using the Console / Command Line Reference</a></p>
+<h5>Console的输出</h5>
+<p>我们知道，除了<code>console.log</code>之外，还有<code>console.debug</code>，<code>console.info</code>，<code>console.warn</code>，<code>console.error</code>这些不同级别的输出。另外一个鲜为人知的功能是，<code>console.log</code>中，你还可以对输出的文本加上css的样式，如下所示：</p>
+<pre class="brush: jscript; title: ; notranslate">console.log(&quot;%c左耳朵&quot;, &quot;font-size:90px;color:#888&quot;)</pre>
+<p><img class="aligncenter wp-image-17651 size-medium" src="http://coolshell.cn//wp-content/uploads/2017/01/console.log_-300x92.png" width="300" height="92" srcset="http://coolshell.cn//wp-content/uploads/2017/01/console.log_-300x92.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/console.log_-768x236.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/console.log_-604x185.png 604w, http://coolshell.cn//wp-content/uploads/2017/01/console.log_.png 782w" sizes="(max-width: 300px) 100vw, 300px" /></p>
+<p>于是，你可以定义一些相关的log函数，如：</p>
+<pre class="brush: jscript; title: ; notranslate">console.todo = function( msg){
+  console.log( '%c%s %s %s', 'font-size:20px; color:yellow; background-color: blue;', '--', msg, '--');
+}
+console.important = function( msg){
+  console.log( '%c%s %s %s', 'font-size:20px; color:brown; font-weight: bold; text-decoration: underline;', '--', msg, '--');
+}</pre>
+<p><img class="aligncenter wp-image-17652" src="http://coolshell.cn//wp-content/uploads/2017/01/console.log2_-1024x411.png" width="500" height="201" srcset="http://coolshell.cn//wp-content/uploads/2017/01/console.log2_-1024x411.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/console.log2_-300x121.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/console.log2_-768x309.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/console.log2_-604x243.png 604w, http://coolshell.cn//wp-content/uploads/2017/01/console.log2_.png 1140w" sizes="(max-width: 500px) 100vw, 500px" /></p>
+<p>关于console.log中的格式化，你可以参看如下表格：</p>
+<table class="t1" cellspacing="0" cellpadding="0">
+<tbody>
+<tr>
+<td class="td1" valign="middle">指示符</td>
+<td class="td2" valign="middle">输出</td>
+</tr>
+<tr>
+<td class="td3" valign="top">%s</td>
+<td class="td4" valign="top">格式化输出一个字符串变量。</td>
+</tr>
+<tr>
+<td class="td3" valign="top">%i or %d</td>
+<td class="td4" valign="top">格式化输出一个整型变量的值。</td>
+</tr>
+<tr>
+<td class="td3" valign="top">%f</td>
+<td class="td4" valign="top">格式化输出一个浮点数变量的值。</td>
+</tr>
+<tr>
+<td class="td3" valign="top">%o</td>
+<td class="td4" valign="top">格式化输出一个DOM对象。</td>
+</tr>
+<tr>
+<td class="td3" valign="top">%O</td>
+<td class="td4" valign="top">格式化输出一个Javascript对象。</td>
+</tr>
+<tr>
+<td class="td3" valign="top">%c</td>
+<td class="td4" valign="top">为后面的字符串加上CSS样式</td>
+</tr>
+</tbody>
+</table>
+<p>&nbsp;</p>
+<p>除了console.log打印js的数组，你还可以使用console.table来打印，如下所示：</p>
+<pre class="brush: jscript; title: ; notranslate">var pets = [
+  { animal: 'Horse', name: 'Pony', age: 23 },
+  { animal: 'Dog', name: 'Snoopy', age: 13 },
+  { animal: 'Cat', name: 'Tom', age: 18 },
+  { animal: 'Mouse', name: 'Jerry', age: 12}
+];
+console.table(pets)</pre>
+<p><img class="aligncenter wp-image-17653" src="http://coolshell.cn//wp-content/uploads/2017/01/console.table_-1024x438.png" width="500" height="214" srcset="http://coolshell.cn//wp-content/uploads/2017/01/console.table_-1024x438.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/console.table_-300x128.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/console.table_-768x328.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/console.table_-604x258.png 604w, http://coolshell.cn//wp-content/uploads/2017/01/console.table_.png 1142w" sizes="(max-width: 500px) 100vw, 500px" /></p>
+<p>&nbsp;</p>
+<h4>关于console对象</h4>
+<ul>
+<li>console对象除了上面的打日志的功能，其还有很多功能，比如：</li>
+<li>console.trace() 可以打出js的函数调用栈</li>
+<li>console.time() 和 console.timeEnd() 可以帮你计算一段代码间消耗的时间。</li>
+<li>console.profile() 和 console.profileEnd() 可以让你查看CPU的消耗。</li>
+<li>console.count() 可以让你看到相同的日志当前被打印的次数。</li>
+<li>console.assert(expression, object) 可以让你assert一个表达式</li>
+</ul>
+<p>这些东西都可以看看<a href="https://developers.google.com/web/tools/chrome-devtools/console/console-reference" target="_blank">Google的Console API的文档</a>。</p>
+<p>其实，还有很多东西，你可以参看Google的官方文档 &#8211; <a href="https://developers.google.com/web/tools/chrome-devtools/" target="_blank">Chrome DevTools</a></p>
+<h4>关于快捷键</h4>
+<p>点击在 DevTools的右上角的那三个坚排的小点，你会看到一个菜单，点选 <code>Shortcuts</code>，你就可以看到所有的快捷键了</p>
+<p><img class="aligncenter size-large wp-image-17669" src="http://coolshell.cn//wp-content/uploads/2017/01/shortcuts-1024x466.png" alt="" width="640" height="291" srcset="http://coolshell.cn//wp-content/uploads/2017/01/shortcuts-1024x466.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/shortcuts-300x137.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/shortcuts-768x350.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/shortcuts-593x270.png 593w" sizes="(max-width: 640px) 100vw, 640px" /></p>
+<p>如果你知道更多，也欢迎补充！</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-9666" data-post-type="none" ><small class="wp_rp_publish_date">2013年05月22日</small> <a href="http://coolshell.cn/articles/9666.html" class="wp_rp_title">浏览器的渲染原理简介</a></li><li data-position="1" data-poid="in-3684" data-post-type="none" ><small class="wp_rp_publish_date">2011年02月16日</small> <a href="http://coolshell.cn/articles/3684.html" class="wp_rp_title">Web开发人员速查卡</a></li><li data-position="2" data-poid="in-6840" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月19日</small> <a href="http://coolshell.cn/articles/6840.html" class="wp_rp_title">CSS 布局:40个教程、技巧、例子和最佳实践</a></li><li data-position="3" data-poid="in-968" data-post-type="none" ><small class="wp_rp_publish_date">2009年06月04日</small> <a href="http://coolshell.cn/articles/968.html" class="wp_rp_title">18个Web开发的IDE</a></li><li data-position="4" data-poid="in-5537" data-post-type="none" ><small class="wp_rp_publish_date">2011年11月24日</small> <a href="http://coolshell.cn/articles/5537.html" class="wp_rp_title">一些文章资源和趣闻</a></li><li data-position="5" data-poid="in-1817" data-post-type="none" ><small class="wp_rp_publish_date">2009年11月17日</small> <a href="http://coolshell.cn/articles/1817.html" class="wp_rp_title">9个最常见IE的Bug及其fix</a></li><li data-position="6" data-poid="in-1660" data-post-type="none" ><small class="wp_rp_publish_date">2009年11月04日</small> <a href="http://coolshell.cn/articles/1660.html" class="wp_rp_title">13个不错的Javascript和CSS的菜单</a></li><li data-position="7" data-poid="in-2406" data-post-type="none" ><small class="wp_rp_publish_date">2010年05月11日</small> <a href="http://coolshell.cn/articles/2406.html" class="wp_rp_title">写HTML和CSS的新方法</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17634.html/feed</wfw:commentRss>
+		<slash:comments>41</slash:comments>
+		</item>
+		<item>
+		<title>从 MongoDB “赎金事件” 看安全问题</title>
+		<link>http://coolshell.cn/articles/17607.html</link>
+		<comments>http://coolshell.cn/articles/17607.html#comments</comments>
+		<pubDate>Sat, 07 Jan 2017 09:11:28 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[技术新闻]]></category>
+		<category><![CDATA[网络安全]]></category>
+		<category><![CDATA[Bitcoin]]></category>
+		<category><![CDATA[MongoDB]]></category>
+		<category><![CDATA[ransom]]></category>
+		<category><![CDATA[安全]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17607</guid>
+		<description><![CDATA[今天上午（2017年1月7日），我的微信群中同时出现了两个MongoDB被黑掉要赎金的情况，于是在调查过程中，发现了这个事件。这个事件应该是2017年开年的第一...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17607.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-sup_wechat_big wp-image-17621" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-360x200.jpg" alt="" width="360" height="200" />今天上午（2017年1月7日），我的微信群中同时出现了两个MongoDB被黑掉要赎金的情况，于是在调查过程中，发现了这个事件。这个事件应该是2017年开年的第一次比较大的安全事件吧，发现国内居然没有什么报道，国内安全圈也没有什么动静（当然，他们也许知道，只是不想说吧），Anyway，让我这个非安全领域的人来帮补补位。</p>
+<h4>事件回顾</h4>
+<p>这个事情应该是从2017年1月3日进入公众视野的，是由安全圈的大拿 Victor Gevers （网名：<a href="https://twitter.com/0xDUDE" target="_blank">0xDUDE</a>，<span class="js-display-url"><a class="twitter-timeline-link" dir="ltr" title="http://GDI.foundation" href="http://GDI.foundation" target="_blank" rel="nofollow noopener" data-expanded-url="http://GDI.foundation">GDI.foundation</a> </span>的Chairman），其实，他早在2016年12月27日就发现了一些在互联网上用户的MongoDB没有任何的保护措施，被攻击者把数据库删除了，并留下了一个叫 WARNING 的数据库，这张表的内容如下：</p>
+<pre><code class="language-sql">{
+    "_id" : ObjectId("5859a0370b8e49f123fcc7da"),
+    "mail" : "harak1r1@sigaint.org",
+    "note" : "SEND 0.2 BTC TO THIS ADDRESS 13zaxGVjj9MNc2jyvDRhLyYpkCh323MsMq AND CONTACT THIS EMAIL WITH YOUR IP OF YOUR SERVER TO RECOVER YOUR DATABASE !"
+}</code></pre>
+<p>基本上如下所示：</p>
+<p><span id="more-17607"></span></p>
+<figure id="attachment_17609" style="width: 646px" class="wp-caption aligncenter"><img class="size-full wp-image-17609" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-ransom.png" alt="MongoDB ransom demand (via Victor Gevers)" width="646" height="332" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-ransom.png 646w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-ransom-300x154.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-ransom-525x270.png 525w" sizes="(max-width: 646px) 100vw, 646px" /><figcaption class="wp-caption-text">MongoDB ransom demand (via Victor Gevers)</figcaption></figure>
+<p>说白了就是黑客留下的东西——<strong>老子把你的MongoDB里的数据库给转走了，如果你要你的数据的话，给我0.2个的比特币（大约USD200）</strong>。然后，他的twitter上不断地发布这个“赎金事件”的跟踪报道。与此同时，中国区的V2EX上也发现了相关的攻击问题 《<a href="https://www.v2ex.com/t/331887" target="_blank">自己装的 mongo 没有设置密码结果被黑了</a>》</p>
+<p>然后，在接下来的几天内，全球大约有1800个MongoDB的数据库被黑，这个行为来自一个叫 Harak1r1 的黑客组织（这个组织似乎就好黑MongoDB，据说他们历史上干了近8500个MongoDB的数据库，几乎都是在祼奔的MongoDB）。</p>
+<p>不过，这个组织干了两天后就停手了，可能是因为这事已经引起了全球科技媒体的注意，产生了大量的报道（如果你在Google News里查一下“<a href="https://www.google.com/webhp?sourceid=chrome-instant&amp;ion=1&amp;espv=2&amp;ie=UTF-8#q=mongodb+ransom&amp;newwindow=1&amp;tbm=nws" target="_blank">mongodb ransom</a>”，你会看到大量的报道（中文社区中，只有<a href="https://unwire.pro/2017/01/05/2000-mongodb-ransom/security/" target="_blank">台湾有相关的报道</a>）），他们也许是不敢再搞下去了。</p>
+<p>不过，很快，有几个copycats开始接着干，</p>
+<p>马上跟进的是 own3d ，他们留下的数据库的名字叫 WARNING_ALERT，他们至少干掉了 930个MongoDB，赎金0.5个比特币（USD500），至少有3个用户付费了</p>
+<p>然后是0704341626asdf，他们留下的数据库名字叫PWNED，他们至少干掉了740个MongoDB，赎金0.15个比特币（USD150），看看他们在数据库里留下的文字——<strong>你的MongoDB没有任何的认证，并且暴露在公网里（你TMD是怎么想的？）……</strong></p>
+<figure id="attachment_17610" style="width: 616px" class="wp-caption aligncenter"><img class="size-full wp-image-17610" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-Group-3.jpg" alt="0704341626asdf group ransom note (via Victor Gerves)" width="616" height="236" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-Group-3.jpg 616w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-Group-3-300x115.jpg 300w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB-Group-3-604x231.jpg 604w" sizes="(max-width: 616px) 100vw, 616px" /><figcaption class="wp-caption-text">0704341626asdf group ransom note (via Victor Gerves)</figcaption></figure>
+<p>就在这两天，有两个新的黑客也来了</p>
+<ul>
+<li>先是kraken0，发现到现在1天了，干了13个MongoDB，赎金 0.1个比特币。</li>
+<li>然后是 3lix1r，发现到现在5个小时，干了17个MongoDB，赎金0.25比特币。</li>
+</ul>
+<p>BBC新闻也于昨天报道了这一情况——《<a href="http://www.bbc.com/news/technology-38521973" target="_blank">Web databases hit in ransom attacks</a>》，现在这个事情应该是一个Big News了。</p>
+<h4>关于MongoDB的安全</h4>
+<p>安全问题从来都是需要多方面一起努力，但是安全问题最大的短板就是在用户这边。这次的这个事，说白了，就是用户没有给MongoDB设置上用户名和口令，然后还把服务公开到了公网上。</p>
+<p>是的，这个安全事件，相当的匪夷所思，为什么这些用户要在公网上祼奔自己的数据库？他们的脑子是怎么想的？</p>
+<p>让我们去看一下Shodan上可以看到的有多少个在暴露在公网上而且没有防范的MongoDB？我了个去！<strong>4万7千个，还是很触目惊心的</strong>（下图来自我刚刚创建的 <a href="https://www.shodan.io/report/h0bgF6zM" target="_blank">Shodan关于MongoDB的报表</a>）</p>
+<p><img class="aligncenter size-large wp-image-17614" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Shodan-1024x485.png" alt="" width="640" height="303" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Shodan-1024x485.png 1024w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Shodan-300x142.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Shodan-768x364.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Shodan-570x270.png 570w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Shodan.png 1124w" sizes="(max-width: 640px) 100vw, 640px" /></p>
+<p>&nbsp;</p>
+<p>那么，怎么会有这么多的对外暴露的MongoDB？看了一下Shodan的报告，发现主要还是来自公有云平台，Amazon，Alibaba，Digital Ocean，OVH，Azure 的云平台上有很多这样的服务。不过，像AWS这样的云平台，有很完善的默认安全组设置和VPC是可以不把这样的后端服务暴露到公有云上的，为什么还会有那么多？</p>
+<p><img class="aligncenter wp-image-17616" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Org.png" width="650" height="403" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Org.png 867w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Org-300x186.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Org-768x476.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Org-436x270.png 436w" sizes="(max-width: 650px) 100vw, 650px" /></p>
+<p>&nbsp;</p>
+<p>这么大量的暴露在公网上的服务是怎么回事？有人发现（参看这篇文章《<a href="https://blog.shodan.io/its-the-data-stupid/" target="_blank">It&#8217;s the Data, Stupid!</a>》 ），MongoDB历史上一直都是把侦听端口绑在所有的IP上的，这个问题在5年前（2011年11月）就报给了MongoDB (<a href="https://jira.mongodb.org/browse/SERVER-4216" target="_blank">SERVER-4216</a>)，结果2014年4月才解决掉。所以，他觉得可能似乎 MongoDB的 2.6之前的版本都会默认上侦听在0.0.0.0 。</p>
+<p>于是我做了一个小试验，到我的Ubuntu 14.04上去 <code>apt-get install mongodb</code>（2.4.9版），然后我在<code>/etc/mongodb.conf</code> 文件中，看到了默认的配置是127.0.0.1，mongod启动也侦听在了127.0.0.1这台机器上。一切正常。不过，可能是时过境迁，debain的安装包里已加上了这个默认配置文件。不管怎么样，MongoDB似乎是有一些问题的。</p>
+<p>再到Shodan上看到相关的在公网裸奔的MongoDB的版本如下，发现3.x的也是主流：</p>
+<p><img class="aligncenter wp-image-17615" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Version.png" width="650" height="410" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Version.png 888w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Version-300x189.png 300w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Version-768x484.png 768w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Version-428x270.png 428w" sizes="(max-width: 650px) 100vw, 650px" /></p>
+<p>&nbsp;</p>
+<p>虽然，3.x的版本成为了主流，但是似乎，还是有很多人把MongoDB的服务开到了互联网上来，而且可以随意访问。</p>
+<p><strong>你看，我在阿里云随便找了几台机器，一登就登上去了。</strong></p>
+<p><img class="aligncenter wp-image-17617" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Aliyun.png" width="300" height="587" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Aliyun.png 640w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Aliyun-153x300.png 153w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Aliyun-523x1024.png 523w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Aliyun-138x270.png 138w" sizes="(max-width: 300px) 100vw, 300px" /></p>
+<p>真是如那些黑客中的邮件所说的：WTF，你们是怎么想的？</p>
+<h4>后续的反思</h4>
+<p>为什么还是有这么多的MongoDB在公网上祼奔呢？难道有这么多的用户都是小白？这个原因，是什么呢？我觉得可能会是如下两个原因：</p>
+<p style="padding-left: 30px;">1）一是技术人员下载了mongod的软包，一般来说，mongodb的压缩包只有binary文件 ，没有配置文件 ，所以直接解开后运行，结果就没有安全认证，也绑在了公网上。也许，MongoDB这么做的原因就是为了可以快速上手，不要在环境上花太多的时间，这个有助于软件方面的推广。但是，这样可能就坑了更多的人。</p>
+<p style="padding-left: 30px;">2）因为MongoDB是后端基础服务，所以，需要很多内部机器防问，按道理呢，应该绑定在内网IP上，但是呢，可能是技术人员不小心，绑在了0.0.0.0的IP上。</p>
+<p>那么，这个问题在云平台上是否可以更好的解决呢？</p>
+<p><strong>关于公网的IP。</strong>一般来说，公有云平台上的虚拟主机都会有一个公网的IP地址，老实说，这并不是一个好的方法，因为有很多主机是不需要暴露到公网上的，所以，也就不需要使用公网IP，于是，就会出现弹性IP或虚拟路由器以及VPC这样的虚拟网络服务，这样用户在公有云就可以很容易的组网，也就没有必要每台机器都需要一个公网IP，使用云平台，最好还是使用组网方案比较好的平台。</p>
+<p><strong>关于安全组</strong>。在AWS上，你开一台EC2，会有一个非常严格的安全组——只暴露22端口，其它的全部对外网关闭。这样做，其实是可以帮用户防止一下不小心把不必要的服务Open到公网上。按道理来说，AWS上应该是帮用户防了这些的。但是，AWS上的MongoDB祼奔的机器数量是最多的，估计和AWS的EC2的 基数有关系吧（据说AWS有千万台左右的EC2了）</p>
+<p>最后，提醒大家一下，被黑了也不要去付赎金，因为目前来说没有任何证据证明黑客们真正保存了你的数据，因为，被黑的服务器太多了，估计有几百T的数据，估计是不会为你保存的。下面也是Victor Gevers的提示：</p>
+<p><img class="aligncenter size-full wp-image-17619" src="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Twitter.png" alt="" width="507" height="213" srcset="http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Twitter.png 507w, http://coolshell.cn//wp-content/uploads/2017/01/MongoDB_Twitter-300x126.png 300w" sizes="(max-width: 507px) 100vw, 507px" /></p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="ex-in_11973" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2014年09月28日</small> <a href="http://coolshell.cn/articles/11973.html" class="wp_rp_title">bash代码注入的安全漏洞</a></li><li data-position="1" data-poid="ex-in_6976" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2012年04月09日</small> <a href="http://coolshell.cn/articles/6976.html" class="wp_rp_title">谈谈数据安全和云存储</a></li><li data-position="2" data-poid="ex-in_8711" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2012年12月10日</small> <a href="http://coolshell.cn/articles/8711.html" class="wp_rp_title">程序员疫苗：代码注入</a></li><li data-position="3" data-poid="ex-in_11021" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2014年02月10日</small> <a href="http://coolshell.cn/articles/11021.html" class="wp_rp_title">从“黑掉Github”学Web安全开发</a></li><li data-position="4" data-poid="ex-in_17066" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2015年04月14日</small> <a href="http://coolshell.cn/articles/17066.html" class="wp_rp_title">关于移动端的钓鱼式攻击</a></li><li data-position="5" data-poid="ex-in_6424" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2012年01月06日</small> <a href="http://coolshell.cn/articles/6424.html" class="wp_rp_title">Hash Collision DoS 问题</a></li><li data-position="6" data-poid="ex-in_5353" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2011年08月25日</small> <a href="http://coolshell.cn/articles/5353.html" class="wp_rp_title">你会做Web上的用户登录功能吗？</a></li><li data-position="7" data-poid="ex-in_5987" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2011年11月28日</small> <a href="http://coolshell.cn/articles/5987.html" class="wp_rp_title">如何设计“找回用户帐号”功能</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17607.html/feed</wfw:commentRss>
+		<slash:comments>39</slash:comments>
+		</item>
+		<item>
+		<title>技术人员的发展之路</title>
+		<link>http://coolshell.cn/articles/17583.html</link>
+		<comments>http://coolshell.cn/articles/17583.html#comments</comments>
+		<pubDate>Wed, 28 Dec 2016 04:29:25 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[职场生涯]]></category>
+		<category><![CDATA[Job]]></category>
+		<category><![CDATA[Programmer]]></category>
+		<category><![CDATA[程序员]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17583</guid>
+		<description><![CDATA[2012年的时候写过一篇叫《程序算法与人生选择》的文章，我用算法来类比如何做选择，说白了就是怎么去计算，但是并没有讲程序员可以发展的方向有哪些。 所以，就算是有...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17583.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-sup_wechat_big wp-image-17587" src="http://coolshell.cn//wp-content/uploads/2016/12/people-360x200.jpg" alt="" width="360" height="200" />2012年的时候写过一篇叫《<a href="http://coolshell.cn/articles/8790.html" target="_blank">程序算法与人生选择</a>》的文章，我用算法来类比如何做选择，说白了就是怎么去计算，但是并没有讲程序员可以发展的方向有哪些。 所以，就算是有这些所谓的方法论，我们可能对自己的发展还是会很纠结和无所事从，尤其是人到了30岁，这种彷徨和迷惑越来越重。虽然我之前也写过一篇《<a href="http://coolshell.cn/articles/10688.html" target="_blank">编程年龄和编程技能</a>》的文章，但是还是有很多做技术的人对于自己能否在年纪大时还能去做技术感到没有信心。我猜测，这其中，最大的问题的是，目前从事技术工作的种种负面的经历（比如经常性的加班，被当成棋子或劳动力等等），让人完全看不到希望和前途，尤其是随着年纪越来越大，对未来的越来越没有信心。</p>
+<p>同时，也是因为在GIAC的大会被问到，程序员老了怎么办？而在年底这段时间，也和几个朋友在交流中不断地重复谈到个人发展的这个话题。我的人生过半，活到“不惑”的年纪，自然经常性的对什么事都会回头看看总结归纳，所以，在交谈过程中和交谈过后，自己也有一些思考想记录下来。因为我本人也是在这条路上的人，所以，谈不上给他人指导，我同样也是在瞎乱折腾同样每天在思考自己要去哪儿的“一尘世间迷途老生”。况且，我的经历和眼界非常有限，因此，下面的这些关于个人发展的文字和思考必然是受我的眼界和经历所局限的。也欢迎大家补充和指正。</p>
+<p>这些东西不一定对，也不一定就是全部，期许可以让你在年底的时候有所思考，在明年的时候有所计划。</p>
+<h4>一个重要阶段和标志</h4>
+<p>在讲个人发展之前，我需要先说一下人生中的一个非常重要的阶段——<strong>20到30岁！</strong></p>
+<p><strong>这个阶段的首要任务，就是提升自己学习能力和解决难题的能力。</strong><strong>这是一个非常非常关键的时间段！这个时间段几乎决定着你的未来。</strong></p>
+<p><span id="more-17583"></span></p>
+<p>30岁以前，这个时间段，应该是人学习和积累的时间段，这个时间段，就是努力学习的时间段。这个时间段，你一定要把时间花在解决问题的技能上。就是说，你一定要练就成的技能是——你能解决大多数人不能解决的问题。使蛮力埋头加班苦干，当一个搬砖老黄牛的是肯定没有前途的。如果你不幸呆在了一个搬砖的地方，天天被业务压得喘不过气来，我建议你宁可让你的项目延期被老板骂，也要把时间挤出来努力学习基础知识，多掌握一些技术（很多技术在思路上是相通的），然后才能有机会改变自己目前的状况。因为，比起你的个人未来，项目延期被老板骂、绩效不好拿不到奖金，都不是什么事儿。</p>
+<p>总结一下，你在30岁前，工作5-7年，你需要拥有：</p>
+<ul>
+<li><strong>高效的学习能力</strong>。这意味着——基础知识扎实、触类旁通、读英文文档不费劲、有寻找前沿知识的能力、能够看到问题和技术的本质、善于思辩、能独立思考。</li>
+</ul>
+<ul>
+<li><strong>解决问题的能力</strong>。这意味着——你要高效的学习能力、见过很多的场景、犯过或是处理很多错误、能够防火而不是救火。</li>
+</ul>
+<p>如果你拥有这两个能力的现象是—— <strong>在团队或身边的人群中的显现出Leadership</strong>。</p>
+<p>Leadership并不是当领导和经理，而是一种特征，这种特征有如下两个简单的表象：</p>
+<ul>
+<li><strong>帮人解问题</strong>。团队或身边中大多数人都在问：“这问题怎么办？”，而总是你能站出来告诉大家这事该怎么办？</li>
+</ul>
+<ul>
+<li><strong>被人所依赖</strong>。团队或身边中大多数人在做比较关键的决定时，都会来找你咨询你的意见和想法。</li>
+</ul>
+<p>一但你在在30岁之间出现了Leadership这样的特征，那么，你会进入一个正循环的阶段：</p>
+<ul>
+<li>因为你学习能力强，所以，你会有更多的机会解决难题。</li>
+<li>你有更多的机会解决难题，你就会学更多的东西，于是你就会更强。</li>
+<li>上面这个循环，只要循环上几年，就会让你人生的各种可能性大大的增加。</li>
+</ul>
+<p><strong>【 注意 】</strong></p>
+<ul>
+<li>要达到这样的特质，需要找到自己的长处、以及适合自己的环境。就像鱼的特长是呆在水里，让鱼儿去追求陆上动物的刺激生活并不靠谱。</li>
+</ul>
+<ul>
+<li>一般说来，有这样的潜质的人，在学校中就应该要出现。如果你在大学中还没有出现这样的潜质，那么，你在工作当中要加倍努力了（注：所谓的加倍努力，不是让你使蛮力加班，而是让你多学习成长，使蛮力拼命是弥补不了能力、思维、眼界上的缺陷的）。</li>
+</ul>
+<ul>
+<li>Leadership也有范围的，比如，身边的朋友，工作中的团队/部分，圈内，整个行业。Leadership的范围越大，你的个人发展的选择性就越高。反之则越小。</li>
+</ul>
+<ul>
+<li>如果已到了30岁左右，还是没有出现这样的特征。那么，可能未来你也很难有这样的Leadership了。而你的个人发展的可能性可能也就不多了（sigh&#8230;）</li>
+</ul>
+<p><strong>读到这里，我必需要说一下，如果你已开始显现出你的Leadership，那么你才谈得上个人发展，这篇文章后续的内容也可能才会对你有意义</strong>。</p>
+<h4>个人发展的三个方向</h4>
+<p>以我个人短浅的经历和视野，目前只看到的人的发展有如下三个大方向（他们之间可能会有重叠）：</p>
+<p style="padding-left: 30px;">1）<strong>在职场中打拼</strong></p>
+<p style="padding-left: 30px;">2）<strong>去经历有意义有价值的事</strong></p>
+<p style="padding-left: 30px;">3）<strong>追求一种自由的生活</strong></p>
+<p>这三个方向，我个人或多或少都体验过，我也见过身边的很多人走这三个方向走的比较成功。也许还有别的方向，没办法，现在，我的视野就这么大，所以，我在这里，我主要就是谈谈这三个方向。Again，<strong>人有资格去走这三个方向的前提是——已有了上面我说的Leadership那种特质！</strong></p>
+<h4>一、在职场中发展</h4>
+<p>在职场中发展应该是绝大多数人的选择。通过加入公司来达到人生的发展。</p>
+<p>我们经常可以看到很多所谓的“职业规划”，但是大多数职业规划只不过人力资源搞出来的东西，和实际其实是有很大出入的。我的人生经历中，有18年左右是在公司中度过的，在过银行，小公司，大公司，民营公司，外国公司，传统IT公司，互联网公司，不同的公司完全有不同的玩法和文化，我的经历还算丰富，但也不算特别成功，这里只分享一些我在职场中的心得（不一定对，仅供参考）。</p>
+<h5>1、去顶尖公司</h5>
+<p><strong>去顶尖公司的一个目的就是让你的Leadership的范围的可能性扩大</strong>。</p>
+<p>因为公司和公司的差距也不小，所以，就算你在低端公司里是骨干份子，但在高端公司里可能只是一个普通员工（就像中国足球队的主力到了英超可能都无法入选）。所以，在职场中，如果你要让你的个人价值最大化的话，你一定要去顶尖的公司。因为顶尖公司里有非常不错的工作方法和场景，这并不是能看书或是交流得来的，这是必需要去亲身体验的。所以说，在顶尖公司掌握的技能，开阔的眼界，通常来说都会比低端公司的要多得多。</p>
+<p>另外，每个公司的工作级别都是有相互对标的，比如：阿里的P几对应于百度的T几。国内的一线公司职位还相当，但是如果和国外一线公司的比，那就有差距了，而且差距还很大。比如，Google或Facebook的某个高级工程师，可能就对应于阿里的P8/P9甚至更高。</p>
+<p>是的，对于职场来说，如果你在顶尖公司是骨干，那么，你去低端公司，则有很大机会会成为他们高管和核心。就好像你在Facebook里干三五年成为他们的技术骨干，那么你到BAT去成成为高管概率是非常大的。反过来，如果你毕业主去了BAT成为了一个螺丝钉，在天天加班中度过你的青春，你干个十年能成为BAT的高管的概率可能会非常的低。</p>
+<h5>2、去真正的创业公司</h5>
+<p>去顶尖公司和去创业公司在某些时候并不冲突。不过，这里我想讲的是，一个技术能力强的人在大公司可能会被埋没掉。因为大公司业务成功后，</p>
+<ul>
+<li>成功的公司在招聘各种高级技术人才都不会成为问题，于是少你一个不少，多你一个不多。</li>
+</ul>
+<ul>
+<li>成功的公司其整个技术体系已经完成，Legacy的问题也比较多，所以，可以供你发挥的余地不大。</li>
+</ul>
+<ul>
+<li>成功的公司更多的可能会想要稳定的系统，稳定必然会产生保守，而保守则产生不思进取。</li>
+</ul>
+<p>所以，对于中高级人才来说，在大公司里的能产生的个人价值，可能远远不如那些求贤若渴、没有包袱、可以尽情施展、相对更为灵活和自由的创业型公司。</p>
+<p>不过，去创业公司需要小心仔细的挑选和评估，创业公司的不确定因素很多，也和创始人的因素太大了，所以，你需要小心了解创始人和他们的业务情况，想法和理念差不多才能更好的共事。</p>
+<p>好多创业公司其实并不是真正的创业公司，他们创业有很大的侥幸和驱利心理，要小心甄别。因为那不是真正的创业公司。</p>
+<h5>3、职业生涯的发展阶段</h5>
+<p>首先，有一个不争事实——<strong>整个社会是会把最重要的工作交给30岁左右的这群人的。也就是说，30岁左右这群人是这个社会的做事的中坚力量。</strong></p>
+<p>所以，这是一个机遇！如果你有了Leadership，你就一定能在这个时间段内赶得上这个机遇——公司和领导对你寄于信任和厚望，并把重要的团队和工作交给你。</p>
+<p>于是，你的30岁到40岁就成了一个职业生涯的发展期，也就是你的事业上升期。如果你到40岁都没有赶上，那么你的职业生涯也就这样了，老有所成的人是少数。</p>
+<p>在你事业的上升期，你需要更多的软技能，比如：</p>
+<ul>
+<li>带领产品和业务的发展的能力</li>
+<li>推行自己喜欢的文化的能力</li>
+<li>项目管理的能力——在任务重、时间紧中求全</li>
+<li>沟通和说服别人的能力</li>
+<li>解决冲突的能力</li>
+<li>管理和发展团队的能力</li>
+<li>解决突发事件的应急能力</li>
+<li>…… ……</li>
+</ul>
+<p>另外，你还要明白在职场里的几个冷酷的事实：</p>
+<ul>
+<li><strong>你开始要关心并处理复杂的人事</strong>。尤其在大公司，大量的人都是屁股决定脑袋，利益关系复杂，目标不一致，每个人心里都有不一样的想法。这个时候再也不是talk is cheap, show me the code！而是，code is cheap，talk is the matter。你需要花大量的时间去思考和观察形形色色的人。需要耗费大量的精力在不同的人之间周旋，而不是花时间去创造些什么有价值的东西。</li>
+</ul>
+<ul>
+<li><strong>你要开始学会使用各种政治手段</strong>。办公室政治不可避免，越大的公司越重，自从你开始成为一线的leader的那一天起，你就开始成为“里外不是人”的角色，需要在下属和领导，员工和公司之间周旋。随而你的级别越来越高，你需要使用更多的政治手段，你会学会审时度世的站队，学会迎合员工和领导，学会用官员的语言说话，学会此一时彼一时，学会妥协和交换，学会忍气吞声，学会在在适当的时机表现自己，学会波澜不惊，学会把自己隐藏起来，甚至你还会迷失自我，开始学会一些厚黑学，比如不得不在适当的时机在背后捅人刀子……你可能会成为一个你自己都讨厌的人</li>
+</ul>
+<p>听上去真的好无聊，所以，你现在也明白为什么高层们都看上去很忙很累，而且抽不出时间来关心细节问题，因为，他们更多的是要协调整个组织和系统来运转，甚至还要四处周旋，各种博弈，没办法，这是职场的必需的东西！听起来是不是感觉人类很愚蠢？这真是没办法的事。如果你不想或是也没有能力玩这些东西，那么你需要去那些可以让技术人员安安心心做技术的公司。这类的公司，我见过Microsoft、Google、Amazon或是一些创业公司里都有。国内的大公司中也有让技术人员成长的职业成长线，但老实说，表面上看似是一个让人专心做技术的升职成长线，但其实还是管理岗位。</p>
+<p>所以，<strong>技术人员在职场中的归宿有两条路 —— 到真正的技术公司成为一个专心做技术的人，或是在成为一个职业的经理人</strong>。</p>
+<p>&nbsp;</p>
+<h4>二、追求人生的经历</h4>
+<p>先说三个故事，</p>
+<ul>
+<li>第一个，是在阿里的时候，有一天在内网里看到一个贴子，一个做产品的女孩说自己准备离职要去法国学烘培厨艺，引得大家热评。</li>
+</ul>
+<ul>
+<li>第二个，是在亚马逊的美国老板，他每年都要去报个培训班学一个技能，比如：厨艺、开双翼飞机、夜总会里的DJ……、甚至去华盛顿去学当一个政客。</li>
+</ul>
+<ul>
+<li>第三个，是在汤森路透工作时，一个英国的同事，有一天他说他离职了，和自己的老婆准备用余生去周游世界，我问他是不是有足够多的钱了？他和我说，钱不够，他俩口子的计划是，边旅游边打工，打工打够到下一站的钱就走。他还说，那种用假期去另一个城市的旅游太没意思了，如果你不在那个地方生活上一段时间 ，你怎么能算是好的旅游体验呢？好吧，无法反驳。</li>
+</ul>
+<p>我是觉得他们把自己的人生过得如此有意思，令我很佩服。虽然跨界跨得有点猛，但是 Why Not？</p>
+<p>在这里，我想说，去追求一种和众人不一样的人生经历也是一件挺好的事，我个人感觉，比起在职场里有趣地多多了。如果你厌倦了职场，其实为什么不去追求一下不同的人生经历呢。就算你不想去追求跨度比较大的人生经历，那么，在技术圈里，也有很多有价值有意思的经历也可以去的。<strong>追求刺激有意义的与众不同的经历的人，其实也能算是一种人生的成功，不是吗？</strong></p>
+<p>如果只说技术方面，我个人看到的去追求经历的人，有两种追求的人其实也很成功的：</p>
+<ul>
+<li><strong>到技术创新的发源地去经历创新</strong>。计算机互联网各种技术的创新引擎，基本上来说，就是在美国了。我们赶上了这个时代，也选对了这个时代最火热的行业，那么，有什么理由不去这个时代的技术发动机那里去经历呢？在美国硅谷湾区，无论是大公司，还是创业公司，都在迸发着各式各样的创新，如果有能力有机会，为什么不努力去经历一下呢？不经历一下，老了不会觉得错过了是一种后悔吗？</li>
+</ul>
+<ul>
+<li><strong>去经历下一个热点技术的发展</strong>。从IT，到互联网、再到移动互联网、云计算、大数据，再到未来的AI，VR，IoT……，技术创新的浪潮一波接一波的过来，你是想在那继续搬砖搬下去，是想迎浪而上去经历浪潮，还是想成为一个随波逐流的人？</li>
+</ul>
+<p>打工也好，创业也好，在国内也好，在国外也好，这些都是形式，不是内容。内容则是你有没有和有想法的人去经历有意义有价值事？人生苦短，白驹过隙，我们技术人员最大的幸运就是生在这样一个刺激的时代，那么，你还有什么理由不去追逐这些前沿刺激的经历呢？</p>
+<h4>三、追求自由的生活</h4>
+<p>我相信“自由”这个事，是所有人的心中都会想去追求的。“生命诚可贵，爱情价更高，…… ”（哈哈）</p>
+<p>但一说起自由，绝大多数人都想到的是“财富自由”或是“财务自由”，其实，并不完全是这样的，在自由的通路上，我个人的经历告诉我，其实，你会有很多的不同类型的自由。下面，是我对几个层次的“自由”的理解。</p>
+<p><strong>第一层自由——工作自由</strong>。人的第一层自由的境界是——“工作自由”，我到不是说你在工作单位上可以很自由，虽然有特例，但并不普遍。我想说的“工作自由”是——你不会有失业危机感了。也就是说，你成了各个公司的抢手货，你不但不愁找不到工作，而且你是完全不愁找不到好工作。试想一下，如果是工作来找你，一方面，你就有真正意义上的工作选择权了，另一方面，你都不愁工作了，你完全就可以随时离职去干你想干的事了。此时，你就达到了“工作自由”。</p>
+<p><strong>第二层自由——技能自由</strong>。工作自由已是不错，不过前提是你还是需要依赖于别人提供的工作机会。而技能自由则是你可以用自己的技能养活自己，而不需要去公司里工作。也就是所谓的自由职业者了，社会上，这样的人也不少，比如，一些健身体育教练、设计师、翻译者、作者……这些都可以算是自由职业者，程序员这个职业中只要不是搬砖的，有想法的，就有可以成为自由积业者的潜质，想一想，你拥有的编程能力，其实是一种创造的能力，也就是创造力，只要你Make Something People Want（YC创业公司的slogan），你是完全可以通过自己的技能来养活自己的。如果你通过某些自动化的东西，或是你在App上做了一个软件个体户，让自己的收入不断，甚至你做了一个开源软件，社区每个月都给你捐款捐到比你打工挣的还多，那么你就真正的有了技能自由了。</p>
+<p><strong>第三层自由——物质自由。</strong>我把财务自由换了一种说法。我个人觉得，除了有个好爸爸之外这种特例的情况，如果你想有物质自由的话，本质上来说，你一定要学会投资，投资不一定是你的钱，时间也是一种财富，年轻更是，你怎么投资你的时间还有你的青春？你要把你的投资投到什么样的事，什么样的人？对于投资这个事，风险也比较大。但是，人生不敢冒险可能才是最大的冒险。这个世界有很多技术不是你能看书学来的，而要只能在实战中学会的，比如：游泳。投资可能也是一种。只有真正懂投资的人，或是运气非常好的人，才可能实现物质自由。</p>
+<p>追求自由的生活，其实也是个人发展道路上的一个不错的选择。通常来说，自由的人，能力都不差，钱也不会少。因为，他们懂得投资。</p>
+<p>也就是说，拥有追求自由能力的的人，</p>
+<ul>
+<li>不但有领导力和创造力（也可指导大多数人并走在大多数人前面）</li>
+<li>同时他还懂得怎么投资（知道时间和精力和金钱应该投在什么地方）</li>
+</ul>
+<p>（注：这里我没有提精神自由，老实说，精神上的自由我也不清楚是什么东西，因为我还没有见过，眼界有限，所以先按不表了，不然真成鸡汤文了）</p>
+<h4>总结</h4>
+<p>无论是在职场中打拼，还是追求精彩的经历，还是去实现自由，我觉得都是不错的个人发展的方向。</p>
+<p>他们都有重叠，比如：</p>
+<ul>
+<li>你可以在职场中去追求那些刺激的经历的公司。</li>
+<li>同样也可以通过加入有潜力高速发展的公司来达到自由。</li>
+<li>你也可以通过追寻不一样的经历来达到人生的自由。</li>
+<li>……</li>
+</ul>
+<p><strong>总之，这里的逻辑是——</strong></p>
+<ul>
+<li><strong>能够去规划自己的个人发展的人，通常都是有很多机会和可能性的人</strong>。</li>
+</ul>
+<ul>
+<li><strong>有很多机会和可能性的人，通常都是有Leadership，喜欢冒险的人。</strong></li>
+</ul>
+<ul>
+<li><strong>有Leadership喜欢冒险的人，通常都是学习能力强，思维活跃，喜欢折腾，懂得“投资”的人。</strong></li>
+</ul>
+<ul>
+<li><strong>学习能力强思维活跃的人，通常来说，都是喜欢看书，喜欢实践和新鲜事物，不怕艰难和挑战，用智力而不是使蛮力的人。</strong></li>
+</ul>
+<ul>
+<li><strong>懂得“投资”的人，通常来说，他们更多的关注的是未来和长远的成长，而不是当下的KPI、奖金和晋升。</strong></li>
+</ul>
+<p>&nbsp;</p>
+<figure id="attachment_17592" style="width: 700px" class="wp-caption aligncenter"><img class="size-full wp-image-17592" src="http://coolshell.cn//wp-content/uploads/2016/12/up.jpg" alt="电影《飞屋环游记》" width="700" height="322" srcset="http://coolshell.cn//wp-content/uploads/2016/12/up.jpg 700w, http://coolshell.cn//wp-content/uploads/2016/12/up-300x138.jpg 300w, http://coolshell.cn//wp-content/uploads/2016/12/up-587x270.jpg 587w" sizes="(max-width: 700px) 100vw, 700px" /><figcaption class="wp-caption-text"><center>插图来自电影《飞屋环游记》</center></figcaption></figure>
+<p style="text-align: center;"><strong>最后祝大家新年快乐，来年大展鸿图。</strong></p>
+<p>（全文完）</p>
+<p>&nbsp;</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-6142" data-post-type="none" ><small class="wp_rp_publish_date">2011年12月20日</small> <a href="http://coolshell.cn/articles/6142.html" class="wp_rp_title">三个事和三个问题</a></li><li data-position="1" data-poid="in-3231" data-post-type="none" ><small class="wp_rp_publish_date">2010年10月26日</small> <a href="http://coolshell.cn/articles/3231.html" class="wp_rp_title">你和你的工作</a></li><li data-position="2" data-poid="in-8790" data-post-type="none" ><small class="wp_rp_publish_date">2012年12月28日</small> <a href="http://coolshell.cn/articles/8790.html" class="wp_rp_title">程序算法与人生选择</a></li><li data-position="3" data-poid="in-4990" data-post-type="none" ><small class="wp_rp_publish_date">2011年07月18日</small> <a href="http://coolshell.cn/articles/4990.html" class="wp_rp_title">程序员技术练级攻略</a></li><li data-position="4" data-poid="in-4506" data-post-type="none" ><small class="wp_rp_publish_date">2011年04月20日</small> <a href="http://coolshell.cn/articles/4506.html" class="wp_rp_title">再谈“我是怎么招聘程序员的”（上）</a></li><li data-position="5" data-poid="in-10688" data-post-type="none" ><small class="wp_rp_publish_date">2013年11月13日</small> <a href="http://coolshell.cn/articles/10688.html" class="wp_rp_title">编程能力与编程年龄</a></li><li data-position="6" data-poid="in-9156" data-post-type="none" ><small class="wp_rp_publish_date">2013年03月11日</small> <a href="http://coolshell.cn/articles/9156.html" class="wp_rp_title">《Rework》摘录及感想</a></li><li data-position="7" data-poid="in-7048" data-post-type="none" ><small class="wp_rp_publish_date">2012年04月17日</small> <a href="http://coolshell.cn/articles/7048.html" class="wp_rp_title">挑战无处不在</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17583.html/feed</wfw:commentRss>
+		<slash:comments>138</slash:comments>
+		</item>
+		<item>
+		<title>如何读懂并写出装逼的函数式代码</title>
+		<link>http://coolshell.cn/articles/17524.html</link>
+		<comments>http://coolshell.cn/articles/17524.html#comments</comments>
+		<pubDate>Sun, 23 Oct 2016 09:56:29 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[编程语言]]></category>
+		<category><![CDATA[Closure]]></category>
+		<category><![CDATA[functional]]></category>
+		<category><![CDATA[Javascript]]></category>
+		<category><![CDATA[Y combinator]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17524</guid>
+		<description><![CDATA[今天在微博上看到了 有人分享了下面的这段函数式代码，我把代码贴到下面，不过我对原来的代码略有改动，对于函数式的版本，咋一看，的确令人非常费解，仔细看一下，你可能...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17524.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img src="http://coolshell.cn//wp-content/uploads/2016/10/drawing-recursive-300x204.jpg" alt="drawing-recursive" width="300" height="204" class="alignright size-medium wp-image-17535" srcset="http://coolshell.cn//wp-content/uploads/2016/10/drawing-recursive-300x204.jpg 300w, http://coolshell.cn//wp-content/uploads/2016/10/drawing-recursive-768x522.jpg 768w, http://coolshell.cn//wp-content/uploads/2016/10/drawing-recursive-1024x696.jpg 1024w, http://coolshell.cn//wp-content/uploads/2016/10/drawing-recursive.jpg 1100w" sizes="(max-width: 300px) 100vw, 300px" />今天在微博上看到了 有人<a href="http://weibo.com/1655747731/Ee4gU0qNn" target="_blank">分享了下面的这段函数式代码</a>，我把代码贴到下面，不过我对原来的代码略有改动，对于函数式的版本，咋一看，的确令人非常费解，仔细看一下，你可能就晕掉了，似乎完全就是天书，看上去非常装逼，哈哈。不过，我感觉解析那段函数式的代码可能会一个比较有趣过程，而且，我以前写过一篇《<a href="http://coolshell.cn/articles/10822.html" target="_blank">函数式编程</a>》的入门式的文章，正好可以用这个例子，再升华一下原来的那篇文章，顺便可以向大家更好的介绍很多基础知识，所以写下这篇文章。</p>
+<h4>先看代码</h4>
+<p>这个代码平淡无奇，就是从一个数组中找到一个数，O(n)的算法，找不到就返回 null。</p>
+<p>下面是正常的 old-school 的方式。不用多说。</p>
+<pre class="brush: jscript; title: ; notranslate">//正常的版本
+function find (x, y) {
+  for ( let i = 0; i &lt; x.length; i++ ) {
+    if ( x[i] == y ) return i;
+  }
+  return null;
+}
+
+let arr = [0,1,2,3,4,5]
+console.log(find(arr, 2))
+console.log(find(arr, 8))</pre>
+<p>结果到了函数式成了下面这个样子（好像上面的那些代码在下面若影若现，不过又有点不太一样，为了消掉if语言，让其看上去更像一个表达式，动用了 ? 号表达式）：</p>
+<pre class="brush: jscript; title: ; notranslate">//函数式的版本
+const find = ( f =&gt; f(f) ) ( f =&gt;
+  (next =&gt; (x, y, i = 0) =&gt;
+    ( i &gt;= x.length) ?  null :
+      ( x[i] == y ) ? i :
+        next(x, y, i+1))((...args) =&gt;
+          (f(f))(...args)))
+
+let arr = [0,1,2,3,4,5]
+console.log(find(arr, 2))
+console.log(find(arr, 8))</pre>
+<p>为了讲清这个代码，需要先补充一些知识。</p>
+<p><span id="more-17524"></span></p>
+<h4>Javascript的箭头函数</h4>
+<p>首先先简单说明一下，ECMAScript2015 引入的箭头表达式。箭头函数其实都是匿名函数，其基本语法如下：</p>
+<blockquote>
+<pre class="brush: jscript; gutter: false; title: ; notranslate">(param1, param2, …, paramN) =&gt; { statements } 
+(param1, param2, …, paramN) =&gt; expression
+     // 等于 :  =&gt; { return expression; } 
+
+// 只有一个参数时,括号才可以不加:
+(singleParam) =&gt; { statements }
+singleParam =&gt; { statements }
+
+//如果没有参数,就一定要加括号:
+() =&gt; { statements }</pre>
+</blockquote>
+<p>下面是一些示例：</p>
+<pre class="brush: jscript; title: ; notranslate">var simple = a =&gt; a &gt; 15 ? 15 : a; 
+simple(16); // 15
+simple(10); // 10
+
+let max = (a, b) =&gt; a &gt; b ? a : b;
+
+// Easy array filtering, mapping, ...
+
+var arr = [5, 6, 13, 0, 1, 18, 23];
+var sum = arr.reduce((a, b) =&gt; a + b);  // 66
+var even = arr.filter(v =&gt; v % 2 == 0); // [6, 0, 18]
+var double = arr.map(v =&gt; v * 2);       // [10, 12, 26, 0, 2, 36, 46]</pre>
+<p>看上去不复杂吧。不过，上面前两个 simple 和 max 的例子都把这箭头函数赋值给了一个变量，于是它就有了一个名字。有时候，某些函数在声明的时候就是调用的时候，尤其是函数式编程中，一个函数还对外返回函数的时候。比如下在这个例子：</p>
+<pre class="brush: jscript; title: ; notranslate">function MakePowerFn(power) {
+  return function PowerFn(base) {
+    return Math.pow(base, power);
+  } 
+}
+
+power3 = MakePowerFn(3); //制造一个X的3次方的函数
+power2 = MakePowerFn(2); //制造一个X的2次方的函数
+
+console.log(power3(10)); //10的3次方 = 1000
+console.log(power2(10)); //10的2次方 = 100</pre>
+<p>其实，在 MakePowerFn 函数里的那个 PowerFn 根本不需要命名，完全可以写成：</p>
+<pre class="brush: jscript; title: ; notranslate">function MakePowerFn(power) {
+  return function(base) {
+    return Math.pow(base, power);
+  } 
+}</pre>
+<p>如果用箭头函数，可以写成：</p>
+<pre class="brush: jscript; title: ; notranslate">MakePowerFn = power  =&gt; {
+  return base =&gt; {
+    return Math.pow(base, power);
+  } 
+}</pre>
+<p>我们还可以写得更简洁（如果用表达式的话，就不需要 { 和 }， 以及 return 语句 ）：</p>
+<pre class="brush: jscript; title: ; notranslate">MakePowerFn = power =&gt; base =&gt; Math.pow(base, power)</pre>
+<p>我还是加上括号，和换行可能会更清楚一些：</p>
+<pre class="brush: jscript; title: ; notranslate">MakePowerFn = (power) =&gt; (
+  (base) =&gt; (Math.pow(base, power))
+)</pre>
+<p>好了，有了上面的知识，我们就可以进入一个更高级的话题——匿名函数的递归。</p>
+<h4>匿名函数的递归</h4>
+<p>函数式编程立志于用函数表达式消除有状态的函数，以及for/while循环，所以，在函数式编程的世界里是不应该用for/while循环的，而要改用递归（递归的性能很差，所以，一般是用尾递归来做优化，也就是把函数的计算的状态当成参数一层一层的往下传递，这样语言的编译器或解释器就不需要用函数栈来帮你保存函数的内部变量的状态了）。</p>
+<p>好了，那么，匿名函数的递归该怎么做？</p>
+<p>一般来说，递归的代码就是函数自己调用自己，比如我们求阶乘的代码：</p>
+<pre class="brush: jscript; title: ; notranslate">
+function fact(n){
+  return n==0 ? 1 :  n * fact(n-1);
+};
+result = fact(5);
+</pre>
+<p>在匿名函数下，这个递归该怎么写呢？对于匿名函数来说，<b>我们可以把匿名函数当成一个参数传给另外一个函数，因为函数的参数有名字，所以就可以调用自己了</b>。 如下所示：</p>
+<pre class="brush: jscript; title: ; notranslate">function combinator(func) {
+  func(func);
+}</pre>
+<p>这个是不是有点作弊的嫌疑？Anyway，我们再往下，把上面这个函数整成箭头函数式的匿名函数的样子。</p>
+<pre class="brush: jscript; title: ; notranslate">（func) =&gt; (func(func)) </pre>
+<p>现在你似乎就不像作弊了吧。把上面那个求阶乘的函数套进来是这个样子：</p>
+<p>首先，先重构一下fact，把fact中自己调用自己的名字去掉：</p>
+<pre class="brush: jscript; title: ; notranslate">function fact(func, n) {
+  return n==0 ? 1 :  n * func(func, n-1);
+}
+
+fact(fact, 5); //输出120
+</pre>
+<p>然后，我们再把上面这个版本变成箭头函数的匿名函数版：</p>
+<pre class="brush: jscript; title: ; notranslate">
+var fact = (func, n) =&gt; ( n==0 ? 1 :  n * func(func, n-1) )
+fact(fact, 5)
+</pre>
+<p>这里，我们依然还要用一个fact来保存这个匿名函数，我们继续，我们要让匿名函数声明的时候，就自己调用自己。</p>
+<p>也就是说，我们要把 </p>
+<pre class="brush: jscript; title: ; notranslate">(func, n) =&gt; ( n==0 ? 1 :  n * func(func, n-1) )</pre>
+<p>这个函数当成调用参数，传给下面这个函数：</p>
+<pre class="brush: jscript; title: ; notranslate">(func, x) =&gt; func(func, x) </pre>
+<p>最终我们得到下面的代码：</p>
+<pre class="brush: jscript; title: ; notranslate"> 
+( (func, x) =&gt; func(func, x) ) (  //函数体
+  (func, n) =&gt; ( n==0 ? 1 :  n * func(func, n-1) ), //第一个调用参数
+  5 //第二调用参数
+); </pre>
+<p>好像有点绕，anyway, 你看懂了吗？没事，我们继续。</p>
+<h4>动用高阶函数的递归</h4>
+<p>但是上面这个递归的匿名函数在自己调用自己，所以，代码中有hard code的实参。我们想实参去掉，如何去掉呢？我们可以参考前面说过的那个 MakePowerFn 的例子，不过这回是递归版的高阶函数了。</p>
+<pre class="brush: jscript; title: ; notranslate">HighOrderFact = function(func){
+  return function(n){
+    return n==0 ? 1 : n * func(func)(n-1);
+  };
+};</pre>
+<p>我们可以看，上面的代码简单说来就是，<b>需要一个函数做参数，然后返回这个函数的递归版本</b>。那么，我们怎么调用呢？</p>
+<pre class="brush: jscript; title: ; notranslate">fact = HighOrderFact(HighOrderFact);
+fact(5); </pre>
+<p>连起来写就是：</p>
+<pre class="brush: jscript; title: ; notranslate">HighOrderFact ( HighOrderFact ) ( 5 )</pre>
+<p>但是，这样让用户来调用很不爽，所以，以我们一个函数把 <b> HighOrderFact ( HighOrderFact ) </b> 给代理一下：</p>
+<pre class="brush: jscript; title: ; notranslate">fact = function ( hifunc ) {
+  return hifunc ( hifunc );
+} (
+  //调用参数是一个函数
+  function (func) { 
+    return function(n){
+      return n==0 ? 1 : n * func(func)(n-1);
+    };
+  }
+);
+
+fact(5); //于是我们就可以直接使用了</pre>
+<p>用箭头函数重构一下，是不是简洁了一些？</p>
+<pre class="brush: jscript; title: ; notranslate">fact = (highfunc =&gt; highfunc ( highfunc ) ) (
+  func =&gt; n =&gt;  n==0 ? 1 : n * func(func)(n-1)
+);</pre>
+<p>上面就是我们最终版的阶乘的函数式代码。</p>
+<h4>回顾之前的程序</h4>
+<p>我们再来看那个查找数组的正常程序：</p>
+<pre class="brush: jscript; title: ; notranslate">//正常的版本
+function find (x, y) {
+  for ( let i = 0; i &lt; x.length; i++ ) {
+    if ( x[i] == y ) return i;
+  }
+  return null;
+}</pre>
+<p>先把for干掉，搞成递归版本：</p>
+<pre class="brush: jscript; title: ; notranslate">function find (x, y, i=0) {
+  if ( i &gt;= x.length ) return null;
+  if ( x[i] == y ) return i;
+  return find(x, y, i+1);
+}</pre>
+<p>然后，写出带实参的匿名函数的版本（注：其中的if代码被重构成了 ？号表达式）：</p>
+<pre class="brush: jscript; title: ; notranslate">( (func, x, y, i) =&gt; func(func, x, y, i) ) (  //函数体
+  (func, x, y, i=0) =&gt; (
+      i &gt;= x.length ?  null :
+         x[i] == y  ?  i : func (func, x, y, i+1)
+  ), //第一个调用参数
+  arr, //第二调用参数
+  2 //第三调用参数
+)</pre>
+<p>最后，引入高阶函数，去除实参：</p>
+<pre class="brush: jscript; title: ; notranslate">const find = ( highfunc =&gt; highfunc( highfunc ) ) (
+   func =&gt; (x, y, i = 0) =&gt; (
+     i &gt;= x.length ?  null :
+           x[i] == y  ?  i : func (func) (x, y, i+1)
+   )
+);</pre>
+<p>注：函数式编程装逼时一定要用const字符，这表示我写的函数里的状态是 immutable 的，天生骄傲！</p>
+<p>再注：我写的这个比原来版的那个简单了很多，原来版本的那个又在函数中套了一套 next， 而且还动用了不定参数，当然，如果你想装逼装到天上的，理论上来说，你可以套N层，呵呵。</p>
+<p><b>现在，你可以体会到，如此逼装的是怎么来的了吧？</b>。</p>
+<h4>其它</h4>
+<p>你还别说这就是装逼，简单来说，我们可以使用数学的方式来完成对复杂问题的描述，那怕是递归。其实，这并不是新鲜的东西，这是Alonzo Church 和 Haskell Curry 上世纪30年代提出来的东西，这个就是 Y Combinator 的玩法，关于这个东西，你可以看看下面两篇文章：</p>
+<p>《<a href="http://mvanier.livejournal.com/2897.html" target="_blank">The Y Combinator (Slight Return)</a>》，</p>
+<p>《<a href="https://en.wikipedia.org/wiki/Fixed-point_combinator" target="_blank">Wikipedia: Fixed-point combinator</a>》</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-10822" data-post-type="none" ><small class="wp_rp_publish_date">2013年12月27日</small> <a href="http://coolshell.cn/articles/10822.html" class="wp_rp_title">函数式编程</a></li><li data-position="1" data-poid="in-11265" data-post-type="none" ><small class="wp_rp_publish_date">2014年03月20日</small> <a href="http://coolshell.cn/articles/11265.html" class="wp_rp_title">Python修饰器的函数式编程</a></li><li data-position="2" data-poid="in-8309" data-post-type="none" ><small class="wp_rp_publish_date">2012年09月20日</small> <a href="http://coolshell.cn/articles/8309.html" class="wp_rp_title">C/C++语言中闭包的探究及比较</a></li><li data-position="3" data-poid="in-5709" data-post-type="none" ><small class="wp_rp_publish_date">2011年10月31日</small> <a href="http://coolshell.cn/articles/5709.html" class="wp_rp_title">API设计：用流畅接口构造内部DSL</a></li><li data-position="4" data-poid="in-2053" data-post-type="none" ><small class="wp_rp_publish_date">2010年01月21日</small> <a href="http://coolshell.cn/articles/2053.html" class="wp_rp_title">最为奇怪的程序语言的特性</a></li><li data-position="5" data-poid="in-10739" data-post-type="none" ><small class="wp_rp_publish_date">2013年12月03日</small> <a href="http://coolshell.cn/articles/10739.html" class="wp_rp_title">Lua简明教程</a></li><li data-position="6" data-poid="in-5202" data-post-type="none" ><small class="wp_rp_publish_date">2011年08月15日</small> <a href="http://coolshell.cn/articles/5202.html" class="wp_rp_title">对象的消息模型</a></li><li data-position="7" data-poid="in-6668" data-post-type="none" ><small class="wp_rp_publish_date">2012年02月27日</small> <a href="http://coolshell.cn/articles/6668.html" class="wp_rp_title">再谈javascript面向对象编程 </a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17524.html/feed</wfw:commentRss>
+		<slash:comments>52</slash:comments>
+		</item>
+		<item>
+		<title>什么是工程师文化？</title>
+		<link>http://coolshell.cn/articles/17497.html</link>
+		<comments>http://coolshell.cn/articles/17497.html#comments</comments>
+		<pubDate>Sun, 18 Sep 2016 08:23:11 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[技术管理]]></category>
+		<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[流程方法]]></category>
+		<category><![CDATA[职场生涯]]></category>
+		<category><![CDATA[Programmer]]></category>
+		<category><![CDATA[程序员]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17497</guid>
+		<description><![CDATA[四年前，我在QCon上演讲了一个《建一支强大的小团队》（整理后的PPT分享于这里）提到了工程师文化，今天，我想在这里再写一篇关于工程师文化的文章，一方面是因为我...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17497.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-full wp-image-17500" src="http://coolshell.cn//wp-content/uploads/2016/09/engineer.jpg" alt="engineer" width="300" height="203" /> 四年前，我在QCon上演讲了一个《<a href="http://www.infoq.com/cn/presentations/Form-powerful-team" target="_blank">建一支强大的小团队</a>》（整理后的<a href="http://vdisk.weibo.com/s/gN-sQ/1351485199">PPT分享于这里</a>）提到了工程师文化，今天，我想在这里再写一篇关于工程师文化的文章，一方面是因为我又有了一些想法和体会，另一方面，因为我也正走在创业的道路，毫无疑问，要建一个有浓重的工程师文化的团队或公司，所以有必要把自己的相关想法形有成白底黑字的“字据”，以供打自己的脸——“要是未来没有做到，这篇文章就打我未来的脸” || “这篇文章太幼稚了，未来的我会打我现在的脸”，当然，如果要打脸，我希望是前者。</p>
+<p>Again，<strong>这篇文章不是招人的贴子，因为我觉得，招聘第一重要的事，不是发招聘广告或是找猎头挖人，而是先得让自己变成一个能配得上真正工程师的公司，然后再谈吸引人的事</strong>。</p>
+<h4>为什么要工程师文化</h4>
+<p>看看最近二十年来社会的发展，计算机和互联网已经渗透到了这个社会的每一个角落，各式各样的计算机技术成为了整个世界发展的强大引擎，各式各样的创新，无论是业务创新还是技术创新，都是依托于技术的快速演进，技术成了解放生产力提高社会运作的效率的中坚力量。以美帝为首的技术创新公司着着实实的改变着这个世界和人类的生活和生产习惯。</p>
+<p><strong>今天，每个从事计算机行业的技术人员都应该感到幸运，因为，我们不但选对了行业，也出生在了正确的时代，可以感受到前所未有的刺激和变化，相比起我们的父辈，我们的人生，能经历这样的时代，实在是一种幸运。</strong>所以，选对了职业并出生在了正确的年代的我们，此时只需要思考的一个问题，那就是，我是否呆在了正确的地方用正确的方式做事？</p>
+<p><span id="more-17497"></span></p>
+<p>在我看来，这个世界上有三种商业公司，</p>
+<ul>
+<li><strong>运营或销售驱动型的公司</strong>。这类的公司以运营和营销见长，技术对于他们来说，更多的只是为了支持大规模的营销活动，以及成本上的控制，所以，基本上来说不太需要技术创新。这种公司最大的问题就是缺乏安全感。</li>
+</ul>
+<ul>
+<li><strong>产品驱动型的公司</strong>。这类公司以产品见长，通过创造能提升用户生活体验的产品见长，技术对于他们来说，除了支持大规模的在线用户之外，他们会更多的去寻找那些为了增强用户体验，提高整个业务流程效率的技术创新。比如：UI的交互方面的，整个业务流程方面的。这种公司最大的问题，就是容易被别人模仿和抄袭。</li>
+</ul>
+<ul>
+<li><strong>技术驱动型的公司</strong>。这类的公司相信技术能改变世界，他们更多的是用强大的工程技术来创造有颠覆性的东西，更多的是用各种自动化的技术取代人类。比如：近代的蒸汽机技术取代了大量的人工，数字技术取代了大量信息传递的人工，现代，这类公司还希望通过人工智能来取代愚蠢的人类来做决定。这种公司最大的问题就是可能做出叫好不叫座的东西。</li>
+</ul>
+<p>这三种公司都可能成功，也都有问题，但是，无一例外，他们都需要强大的技术支撑，只不过，他们把技术所放在的位置不一样。</p>
+<p>无论你有多么的看不起技术人员，你都无法否认，你今天的生活相当的依赖这帮工程师，没有他们，你恐怕都不知道怎么生活了。邓爷爷几十年前就说过——“科学技术是第一生产力” ，无论什么样的科学技术的理论要落地都会依赖于工程技术有多先进。</p>
+<p>所以，<strong>在今天，作为一个IT或互联网公司，“工程师文化”不是一个问题，而是一个常识</strong>！</p>
+<h4>工程师文化的特征</h4>
+<p>我下面罗列的这些特征，来源于：Google的《<a href="https://book.douban.com/subject/26582822/">重新定义公司</a>》，我在Amazon的工作经历，37Signals的《<a href="http://coolshell.cn/articles/9156.html" target="_blank">Rework</a>》，Quora上的 <a href="https://www.quora.com/What-makes-a-good-engineering-culture">What Makes Good Engineering Culture?</a>  Slideshare上的 <a href="http://www.slideshare.net/edmondlau/what-makes-a-great-engineering-culture">What Makes Good Engineering Culture</a>，以及我最近这半年来的一些实践。</p>
+<p>简单说来，<strong>我可以简单的把这多的工程师文化的总结成两大类：“自由” 和 “效率”</strong>。</p>
+<p>本来还应该有个“创新”，但我个人认为，<strong>创新的前提是——在自由的环境下对提高效率的痴迷，就一定会发生创新。</strong></p>
+<p>创新不是凭空出现新的东西，其实，<strong>观察一下人类的发展史，不难发现，几乎所有的创新基本上跳出原来的思维模式用新的思维模式对原有问题的效率进行质的提升</strong>。比如：通信、交通、医疗、教育、生活……几乎全都是在优化效率。</p>
+<p>所以，如果你的精神不自由，你很难跳出老的思维模式，你用老的思维模式你一定不会想到新的方法和方式，如果不是对效率的提升，这个创新可能会不接地气。</p>
+<p>因此，我认为，工程师文化就是自由加效率！</p>
+<h4>自由</h4>
+<p>首先，工程师文化意味的创新文化，工程师都是有创新冲动的人，因为手里有创造技能的人通常都会有想创造点什么的冲动。而创新的源泉水来源于精神的解放，精神自由才会引发各式各样的奇思怪想，才会有常人觉得不可能的疯狂想法和想像力，而这些想法和想像力导致了创新。</p>
+<p>精神上的自由具体表现在：</p>
+<ul>
+<li><strong>自我驱动</strong>。自己管理自己是最好的管理。最失败的管理就是家长和保姆式的管理。兴趣出发的工作才可能迸发出真正的动力。</li>
+</ul>
+<ul>
+<li><strong>灵活的工作时间和地点</strong>。工程师们更多的是脑力工作，而不是体力工作，工作上时间和地点的自由安排可以让工程师们的脑力工作更有效。Remote是一个很不错的工作方式，开源社区基本上都是这钟方式。和Remote有关的话题可参看37Signals的这本书《<a href="https://book.douban.com/subject/25861795/" target="_blank">Remote</a>》</li>
+</ul>
+<ul>
+<li><strong>信息平等</strong>。这意味着，全体员工得到的是原始信息，而不是被管理者们层层加工消化后的信息，信息的屏蔽很容易造成误解和完全错误的行为。信息的平等，大的包括战略、方向、目标、财务，小的包括文档、代码、和知识的共享等。同样，也表现在意见表达上，任何人都有可能表达自己的意见和建议的平等机会，这样才会激发出更多的思路和思辩，从而有不同的更好的思路出现。而不是，大家都看到了问题，而没有人敢说。在Google除了代码全员共享，还有Thanks God, It&#8217;s Friday的文化，每周五，高管们会出来，任员工提各种尖锐的问题，在Amazon，代码和文档基本上全员开放，包括财务报表也对员工开放，另外，除了所有的NB的Principle SDE隔三岔五都会有一个Principle Talk（有很多Talk相当令人开脑洞），还有Amazon内部的Up the River文化，每年会选出一批公司最聪明最有想法的人集思会，讨公司下一步的和战略，并可以把相应的KPI直接按给Senior VP。</li>
+</ul>
+<ul>
+<li><strong>不害怕错误</strong>。处理错误的正确的姿势是分析总结教训，而不是惩罚故障人。前者让人改善进步，后者让人萎缩不前。最大的错误就是不敢犯错，最大的问题就是不敢直面问题。</li>
+</ul>
+<ul>
+<li><strong>宽松的审批系统甚至没有审批系统</strong>。审批通常暗示着三件事，1）对人的不完全信任，2）繁琐的流程，3）思维上的束缚。这些都是创新和想像力的天敌。一个公司的监管、审批、流程越重，这个公司的活力也就越差。</li>
+</ul>
+<ul>
+<li><strong>20%的自由时间</strong>。这是Google公司提出来的，员工有20%自由的时间做自己想做的项目，Gmail就是这么出来的。</li>
+</ul>
+<h4>效率</h4>
+<p>工程师天生是追求效率的。有人说认为程序员花大量的时间做自动化的工具，还不如人肉的效率高，比如，写自动化的脚本花5个小时，而重复做这件事200次只花3个小时。有这样的理解的人根本不懂工程。</p>
+<p>一方面，这个工具可以共享重用，更多的人可以从中受益，这次我花5个小时开发这个工具，下次只用1小时改一下就可以用在别的地方，这是着眼于未来而不是眼下的成本。更重要的是，这是一种文化，一种提高效率的文化，他会鼓励和激发出更多的这样的事情发生。<strong>如果你因为一个程序员花大量的时间开发自动化的工具，而认为这个程序员没有效率，对之批评甚至惩罚的话，那么你就扼杀了提高效率的文化</strong>（关于效率，大家可以看看我的另一篇文章《<a href="http://coolshell.cn/articles/10217.html" target="_blank">关于加班和效率</a>》，你会真正了解什么是效率）</p>
+<p><strong>人类之所以比别的动物聪明就是会使用和发明工具</strong>，而古语也有云：“工欲善其事，必先利其器”，看看美军的装备你就知道战争工具的好坏有多重要了，<strong>一个公司的强大之处在执行力，而执行力的强大之处在于你有什么样的支持工具。这些，已经不是工程师文化，而是人类发展的文化</strong>。</p>
+<p>针对于工程师文化来说，尤其是软件工程，提升工程效率的具体表现如下：</p>
+<ul>
+<li><strong>简化</strong>。简化不是简陋，简单的东西通常意味着用户更好理解，也意味着更容易的维护和运维。就像阿里推行的“小而美”，就像乔布期推崇的“没有产品手册简单易用的产品”，就像Amazon推行的Working Backwards里说的那样，一个新的产品或功能，产品经理需要写三个文档：媒体公关文、用户手册、常见问题，三个文档总共加起来不超过两页A4纸，且不准用任何图片说明，目的就是为了让产品简化和容易使用。</li>
+</ul>
+<ul>
+<li><strong>残酷无情的推行自动化</strong>。编写程序的最本质的目的就是自动化，看看人类发展史上自动化了多少东西。<strong>对于自动化来说，不仅仅只是消除人肉的重复劳动，更重要的是，很多事情人完全干不过机器。</strong>比如：加一台机器，程序在秒级就可以完成，而人是永远不可能达到这样的速度的，再比如：电商中用程序管理数量巨大的订单的自动化系统，加再多的人都完成的不可能像机器那样完成的又好又快。自动化需要大力开发提高生产力的工具，比如：持续集成，持续部署，自动化运维，基础自动化运维，甚至自动化的运营工具。（Amazon的软件工程中对自动化和简代相当迷恋）</li>
+</ul>
+<ul>
+<li><strong>避免无效率的组织架构和无效率的管理</strong>。这体现在这些方面：1）扁平化的组织架构，2）努力用自动化工具取代支持型的工作，3）不超过10个人的全栈小团队，4）不按人员的技能分工而是按其负责的产品或功能分工（关于分工，请参看《<a href="http://coolshell.cn/articles/17295.html" target="_blank">让我们来谈谈分工</a>》），5）开会不是解决问题，开会是表决提案，6）通过产品的目标或信条Tenets来减少沟通和决策过程（Amazon里的每个部门，每个团队，每个产品都有自己的Tenets，这个Tenets标明了要什么不要什么，这样可以避免很多扯皮和难缠的trade-off的决择，比如：AWS的几个信条：运维是最高优级的——这意味着只要是会让运维变得复杂的需求都可能会工程团队被拒掉，Throughput &amp; Latency不能更差——这意味着，功能要为性能让路，因为性能变差了，用户就要买更多的资源）</li>
+</ul>
+<ul>
+<li><strong>正确的组件抽象</strong>。抽象是简化的一部份，一方面，抽象意味着重用和通用，另一方面抽象意味着强大的扩展性，以适配各种可能性。最重要的是，抽象意味着技术能力的输出，无论是内部的其它团队还外部的团队。比如：Google的MapReduce/BigTable/ProtoBuffer，FaceBook的Thrift，还有Amazon内部的WebService框架Coral Service、处理日志监控的Timber，以及全线AWS产品都用到的Amazon Lock Framework（一个分布式锁框架）……</li>
+</ul>
+<ul>
+<li><strong>开发高质量的产品</strong>。因为高质量的代码，不但可以容易的修改和维护，还可以因为少处理线上故障，从而有更多的时间去为未来做更多创造性的工作。这意味着需要有非常严谨的Design Review，Code Review，以及测试，关于Code Review，可以参看这篇文章《<a href="http://coolshell.cn/articles/11432.html" target="_blank">从Code Review 谈如何做技术</a>》，关于严谨的测试，可以参看这篇文章《<a href="http://coolshell.cn/articles/17381.html" target="_blank">如何做性能测试</a>》</li>
+</ul>
+<ul>
+<li><strong>不断的提高标准以及招聘最好的人</strong>。取法其上，得乎其中，取法其中，得乎其下，取法其下，法不得也。如果一个公司或一个团队想变得越来越好，越来越强大的话，就必需要不断的提高自己的工作标准，提高工作标准意味着要不断地培养和招聘更好的人。在Amazon和Google的招聘官中都有一个叫Bar Rasier的人，这个人就是为了提高招聘标准而设立的。</li>
+</ul>
+<ul>
+<li><strong>创建一个持续改善的文化</strong>。一个好的组织，一个好的团队，是需要不断反思前进的，这需要全体员工一起来的。微观层面上，在项目做完后需要有一个总结会分析项目中的得失，在故障出现后，需要有故障分析会，反思得失，在Amazon，严重的故障，需要写一个COE（Correction of Errors）的文档，其中有一节叫“Ask 5 Whys”，让你自己问自己至少5个为什么。在宏观层面，一个公司每年都应该做一定的工作数据分析或是员工调查，比如，是否招聘到了不错的人、工作的投入产出比，员工在哪些地方花时间了，等等，然后不断的用技术手段来改善。（Amazon每年的工程师员工调查表是我活那么大见过的最细最细的调查表了， 问题除了对公司、经理、文化的，还有从，日常工作、开发环境、持结集成，测试自动化、产品质量、软件架构、软件维护、线上问题处理、年度计划、数据仓库建设、通用工具投票……这个员工调查直接导致公司的对工程的投资方向）</li>
+</ul>
+<h4>工程师文化如何落地</h4>
+<p>如果你要让任何文化在公司内得到执行，你有下面几个手段可以选择：</p>
+<ul>
+<li><strong>通过政治手段：你需要把住三个地方——招聘、绩效考核 &amp; 升职</strong>。比如，你要落地工程师文化中的简化和自动化，那你你在招聘的时候，你需要把懂简化和喜欢自动化的人招进来，然后在绩效考核和升职的地方设置上一条硬性指标——你今年简化了什么？自动化了什么？如果没有，对不起不但不能升职，绩效可能还不达标。</li>
+</ul>
+<ul>
+<li><strong>通过经济手段：让不做这事的成本 &gt; 要做这个的成本。</strong>然后，正常的人类都会选择成本低的方案。比如，如果你要推行Design/Code Review/UT以提高质量，你就把QA和OPS团队全挪到一边去，让Dev团队自己测试，自己负责，这样等这些Dev重复多次手动测试，处理多次线上的弱智故障，他们就会自然而然的写自动化测试和做Code Review了，而QA和OPS团队只是帮Dev你做工具罢了，而测试和运维的事全是你DEV的Ownership，出了故障也是Dev自己负责，于是，他们就会发现，不做Code Review和UT的成本远远大于做C Code Review/UT的成本，他们就会去做成本低的事的。</li>
+</ul>
+<p>最后，工程师文化要落地，还有几个小条件，</p>
+<ul>
+<li><strong>第一，团队要小，Ownership很重要，Eat Your Own Dog Food。</strong> 没有人帮你擦屁股，自己的屎自己吃，没有痛苦，不会产生想进步的动力。</li>
+</ul>
+<ul>
+<li><strong>第二，热爱学习和尝试</strong>，学习尝试新的技术，开拓眼界，学习尝试新的思维方式，否则，呆在原地，原有的思维方式只会让你在原地打转转。</li>
+</ul>
+<ul>
+<li><strong>第三，老板更多的相信技术而不是管理</strong>。相信技术会用技术来解决问题，相信管理，那就只会有制度、流程和价值观来解决问题。</li>
+</ul>
+<h4>其它</h4>
+<p>说了这么多，时代还在发展，不过，这是我这么多年经历或看到的工程师文化的东西了。最后吐几个槽——</p>
+<p>对于996和加班这个事，对于工程师来说从来都不是问题，在解决技术问题或是创造的时候，工程师是个很自觉的群体，基本不需要有别人驱动，工程师是最乐意Work Hard的人了。我相信几乎所有走上编程这个职业的人来说，基本上都是兴趣所至，觉得编程很有趣，但却被各个公司996搞得对编程毫无兴趣。为什么，你们这些公司要向中国的教育学习呢？人家本来对这事有比较高的兴趣的，但就是要通过考试/KPI/996这些东西把人家的兴趣一点一点的磨灭掉，把人变成机器、奴隶、牲口，<strong>让人对学习和工作产生了厌倦和讨厌，会是你们这些管理者们所希望的？是不是只有把人变得不思进取了，你们才会管理？</strong>就像《<a href="http://coolshell.cn/articles/4951.html" target="_blank">软件开发中的两种管理方式</a>》中说的第一种人一样？</p>
+<p>另外，我不知道，为什么我一说这些东西，就会有很多人（包括程序员自己）来和我说我是个理想主义者，这些已经不是什么理想了，已被很多成功的公司用了很多很多年了。只是你没有见到过罢了。还有的人说，因为中国的国情不同。这更让我费解了。这让我想到了当年大清朝派了一堆人出国考察后回来后，说外国的那套共和的东西不符合中国国情，最终也在历史的潮流中被淹没掉了。另外，什么叫“中国的国情不同”？中国有全世界数一数二的互联网用户，也有全世界数一数二的市场，不再是以前那个一穷二白的年代了，中国的国情到底有哪些不同呢？</p>
+<p>我不知道各位工程师是为什么活的？但我觉得，<strong>我们选择了一个刺激的职业，也赶上了这个行业大发展的时代，我们不妨扪心自问一下，你是否愿意让自己的能力、青春和热情就这样被磨灭了？</strong></p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="ex-in_9156" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2013年03月11日</small> <a href="http://coolshell.cn/articles/9156.html" class="wp_rp_title">《Rework》摘录及感想</a></li><li data-position="1" data-poid="ex-in_11432" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2014年04月12日</small> <a href="http://coolshell.cn/articles/11432.html" class="wp_rp_title">从Code Review 谈如何做技术</a></li><li data-position="2" data-poid="ex-in_5686" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2011年10月25日</small> <a href="http://coolshell.cn/articles/5686.html" class="wp_rp_title">多些时间能少写些代码</a></li><li data-position="3" data-poid="ex-in_4951" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2011年07月06日</small> <a href="http://coolshell.cn/articles/4951.html" class="wp_rp_title">软件公司的两种管理方式</a></li><li data-position="4" data-poid="ex-in_11656" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2014年06月09日</small> <a href="http://coolshell.cn/articles/11656.html" class="wp_rp_title">开发团队的效率</a></li><li data-position="5" data-poid="ex-in_10217" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2013年07月24日</small> <a href="http://coolshell.cn/articles/10217.html" class="wp_rp_title">加班与效率</a></li><li data-position="6" data-poid="ex-in_17295" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2015年12月13日</small> <a href="http://coolshell.cn/articles/17295.html" class="wp_rp_title">让我们来谈谈分工</a></li><li data-position="7" data-poid="ex-in_8088" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2012年08月16日</small> <a href="http://coolshell.cn/articles/8088.html" class="wp_rp_title">对技术的态度</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17497.html/feed</wfw:commentRss>
+		<slash:comments>103</slash:comments>
+		</item>
+		<item>
+		<title>关于高可用的系统</title>
+		<link>http://coolshell.cn/articles/17459.html</link>
+		<comments>http://coolshell.cn/articles/17459.html#comments</comments>
+		<pubDate>Sun, 21 Aug 2016 04:34:53 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[技术管理]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[系统架构]]></category>
+		<category><![CDATA[Design]]></category>
+		<category><![CDATA[High Availability]]></category>
+		<category><![CDATA[Paxos]]></category>
+		<category><![CDATA[Programmer]]></category>
+		<category><![CDATA[分布式]]></category>
+		<category><![CDATA[程序员]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17459</guid>
+		<description><![CDATA[在《这多年来我一直在钻研的技术》这篇文章中，我讲述了一下，我这么多年来一直在关注的技术领域，其中我多次提到了工业级的软件，我还以为有很多人会问我怎么定义工业级？...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17459.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-medium wp-image-17475" src="http://coolshell.cn//wp-content/uploads/2016/08/HighAvailability-BK-300x300.png" alt="HighAvailability-BK" width="300" height="300" srcset="http://coolshell.cn//wp-content/uploads/2016/08/HighAvailability-BK-300x300.png 300w, http://coolshell.cn//wp-content/uploads/2016/08/HighAvailability-BK-150x150.png 150w, http://coolshell.cn//wp-content/uploads/2016/08/HighAvailability-BK-768x768.png 768w, http://coolshell.cn//wp-content/uploads/2016/08/HighAvailability-BK-144x144.png 144w, http://coolshell.cn//wp-content/uploads/2016/08/HighAvailability-BK.png 1000w" sizes="(max-width: 300px) 100vw, 300px" />在《<a href="http://coolshell.cn/articles/17446.html" target="_blank">这多年来我一直在钻研的技术</a>》这篇文章中，我讲述了一下，我这么多年来一直在关注的技术领域，其中我多次提到了工业级的软件，我还以为有很多人会问我怎么定义工业级？以及一个高可用性的软件系统应该要怎么干出来？这样我也可以顺理成章的写下这篇文章，但是没有人问，那么，我只好厚颜无耻的自己写下这篇文章了。哈哈。</p>
+<p>另外，我在一些讨论高可用系统的地方看到大家只讨论各个公司的技术方案，<strong>其实，高可用的系统并不简单的是技术方案，一个高可用的系统其实还包括很多别的东西，所以，我觉得大家对高可用的系统了解的还不全面，为了让大家的认识更全面，所以，我写下这篇文章</strong>。</p>
+<h4>理解高可用系统</h4>
+<p>首先，我们需要理解什么是高可用，英文叫High Availability（<a href="https://en.wikipedia.org/wiki/High_availability">Wikipedia词条</a>），基本上来说，就是要让我们的计算环境（包括软硬件）做到full-time的可用性。在设计上一般来说，需要做好如下的设计：</p>
+<p><span id="more-17459"></span></p>
+<ol>
+<li>对软硬件的冗余，以消除单点故障。任何系统都会有一个或多个冗余系统做standby</li>
+<li>对故障的检测和恢复。检测故障以及用备份的结点接管故障点。这也就是failover</li>
+<li>需要很可靠的交汇点（CrossOver）。这是一些不容易冗余的结点，比如域名解析，负载均衡器等。</li>
+</ol>
+<p>听起似乎很简单吧，然而不是，细节之处全是魔鬼，冗余结点最大的难题就是对于有状态的结点的数据复制和数据一致性的保证（无状态结点的冗余相对比较简单）。冗余数据所带来的一致性问题是魔鬼中的魔鬼：</p>
+<ul>
+<li>如果系统的数据镜像到冗余结点是异步的，那么在failover的时候就会出现数据差异的情况。</li>
+</ul>
+<ul>
+<li>如果系统在数据镜像到冗余结点是同步的，那么就会导致冗余结点越多性能越慢。</li>
+</ul>
+<p>所以，很多高可用系统都是在做各种取舍，这需要比对着业务的特点来的，比如银行账号的余额是一个状态型的数据，那么，冗余时就必需做到强一致性，再比如说，订单记录属于追加性的数据，那么在failover的时候，就可以到备机上进行追加，这样就比较简单了（阿里目前所谓的异地双活其实根本做不到状态型数据的双活）。</p>
+<p>下面，总结一下高可用的设计原理：</p>
+<ul>
+<li>要做到数据不丢，就必需要持久化</li>
+<li>要做到服务高可用，就必需要有备用（复本），无论是应用结点还是数据结点</li>
+<li>要做到复制，就会有数据一致性的问题。</li>
+<li>我们不可能做到100%的高可用，也就是说，我们能做到几个9个的SLA。</li>
+</ul>
+<h4>高可用系统的技术解决方案</h4>
+<p>我在《<a href="http://coolshell.cn/articles/10910.html" target="_blank">分布式系统的事务处理</a>》中引用过下面这个图：这个图来自来自：Google App Engine的co-founder Ryan Barrett在2009年的Google I/O上的演讲《<a href="http://snarfed.org/transactions_across_datacenters_io.html" target="_blank">Transaction Across DataCenter</a>》（视频： <a title="阿里旺旺无法确定该链接的安全性" href="http://www.youtube.com/watch?v=srOgpXECblk" target="_blank">http://www.youtube.com/watch?v=srOgpXECblk</a>）</p>
+<p><img class="size-full wp-image-10942 aligncenter" src="http://coolshell.cn//wp-content/uploads/2014/01/Transaction-Across-DataCenter.jpg" alt="Transaction Across DataCenter" width="566" height="255" srcset="http://coolshell.cn//wp-content/uploads/2014/01/Transaction-Across-DataCenter.jpg 566w, http://coolshell.cn//wp-content/uploads/2014/01/Transaction-Across-DataCenter-300x135.jpg 300w" sizes="(max-width: 566px) 100vw, 566px" /></p>
+<p>这个图基本上来说是目前高可用系统中能看得到的所有的解决方案的基础了。M/S、MM实现起来不难，但是会有很多问题，2PC的问题就是性能不行，而Paxos的问题就是太复杂，实现难度太大。</p>
+<p>总结一下各个高可用方案的的问题：</p>
+<ul>
+<li>对于最终一致性来说，在宕机的情况下，会出现数据没有完全同步完成，会出现数据差异性。</li>
+<li>对于强一致性来说，要么使用性能比较慢的<a href="https://en.wikipedia.org/wiki/X/Open_XA">XA系</a>的两阶段提交的方案，要么使用性能比较好，但是实现比较复杂的Paxos协议。</li>
+</ul>
+<p>注：这是软件方面的方案。当然，也可以使用造价比较高的硬件解决方案，不过本文不涉及硬件解决方案。</p>
+<p>另外，现今开源软件中，很多缓存，消息中间件或数据库都有持久化和Replication的设计，从而也都有高可用解决方案，但是开源软件一般都没有比较高的SLA，所以，如果我们使用开源软件的话，需要注意这一点。</p>
+<h4>高可用技术方案的示例</h4>
+<p>下面，我们来看一下MySQL的高可用的方案的SLA（下图下面红色的标识表示了这个方案有几个9）：</p>
+<p><a href="http://www.slideshare.net/andrewjamesmorgan/mysql-high-availability-solutions-feb-2015-webinar"><img class="aligncenter size-full wp-image-17461" src="http://coolshell.cn//wp-content/uploads/2016/08/mysql-high-availability-solutions-feb-2015-webinar-9-638.jpg" alt="mysql-high-availability-solutions-feb-2015-webinar-9-638" width="638" height="359" srcset="http://coolshell.cn//wp-content/uploads/2016/08/mysql-high-availability-solutions-feb-2015-webinar-9-638.jpg 638w, http://coolshell.cn//wp-content/uploads/2016/08/mysql-high-availability-solutions-feb-2015-webinar-9-638-300x169.jpg 300w" sizes="(max-width: 638px) 100vw, 638px" /></a></p>
+<p style="text-align: center;">图片来源：<a href="http://www.slideshare.net/andrewjamesmorgan/mysql-high-availability-solutions-feb-2015-webinar">MySQL High Availability Solutions</a></p>
+<p>简单解释一下MySQL的这几个方案（主要是想表达一个越多的9就越复杂）</p>
+<ul>
+<li>MySQL Repleaction就是传统的异步数据同步或是半同步Semi-Sync（只要有一个slave收到更新就返回成功）这个方式本质上不到2个9。</li>
+<li>MySQL Fabric简单来说就是数据分片下的M/S的读写分离模式。这个方案的的可用性可以达到99%</li>
+<li>DRBD通过底层的磁盘同步技术来解决数据同步的问题，就是RAID 1——把两台以上的主机的硬盘镜像成一个。这个方案不到3个9</li>
+<li>Solaris Clustering/Oracle VM ，这个机制监控了包括硬件、操作系统、网络和数据库。这个方案一般会伴随着节点间的“心跳机制”，而且还会动用到SAN（Storage Area Network）或是本地的分布式存储系统，还会动用虚拟化技术来做虚拟机的迁移以降低宕机时间的概率。这个解决方案完全就是一个“全栈式的解决方案”。这个方案接近4个9。</li>
+<li>MySQL Cluster是官方的一个开源方案，其把MySQL的集群分成SQL Node 和Data Node，Data Node是一个自动化sharing和复制的集群NDB，为了更高的可用性，MySQL Cluster采用了“完全同步”的数据复制的机制来冗余数据结点。这个方案接近5个9。</li>
+</ul>
+<p>那么，这些2个9，3个9，4个9，5个9是什么意思呢？又是怎么来的呢？请往下看。</p>
+<h4>高可用性的SLA的定义</h4>
+<p><strong>上面那些都不是本文的重点，本文的重点现在开始，如何测量系统的高可用性</strong>。当然是SLA，全称<a href="https://en.wikipedia.org/wiki/Service-level_agreement" target="_blank">Service Level Agrement</a>，也就是有几个9的高可用性。</p>
+<p>工业界有两种方法来测量SLA，</p>
+<ul>
+<li>一个是故障发生到恢复的时间</li>
+<li>另一个是两次故障间的时间</li>
+</ul>
+<p>但大多数都采用第一种方法，也就是故障发生到恢复的时间，也就是服务不可用的时间，如下表所示：</p>
+<table class="wikitable" align="center">
+<tbody>
+<tr>
+<th>系统可用性%</th>
+<th>宕机时间/年</th>
+<th>宕机时间/月</th>
+<th>宕机时间/周</th>
+<th>宕机时间/天</th>
+</tr>
+<tr>
+<td align="left">90% (1个9)</td>
+<td>36.5 天</td>
+<td>72 小时</td>
+<td>16.8 小时</td>
+<td>2.4 小时</td>
+</tr>
+<tr>
+<td align="left">99% (2个9)</td>
+<td>3.65 天</td>
+<td>7.20 小时</td>
+<td>1.68 小时</td>
+<td>14.4 分</td>
+</tr>
+<tr>
+<td align="left">99.9% (3个9)</td>
+<td>8.76 小时</td>
+<td>43.8 分</td>
+<td>10.1 分钟</td>
+<td>1.44 分</td>
+</tr>
+<tr>
+<td align="left">99.99% (4个9)</td>
+<td>52.56 分</td>
+<td>4.38 分</td>
+<td>1.01 分钟</td>
+<td>8.66 秒</td>
+</tr>
+<tr>
+<td align="left">99.999% (5个9)</td>
+<td>5.26 分</td>
+<td>25.9 秒</td>
+<td>6.05 秒</td>
+<td>0.87 秒</td>
+</tr>
+</tbody>
+</table>
+<p>比如，99.999%的可用性，一年只能有5分半钟的服务不可用。感觉很难做到吧。</p>
+<p><strong>就算是3个9的可用性，一个月的宕机时间也只有40多分钟，看看那些设计和编码不认真的团队，把所有的期望寄托在人肉处理故障的运维团队， 一个故障就能处理1个多小时甚至2-3个小时，连个自动化的工具都没有，还好意思在官网上声明自己的SLA是3个9或是5个9，这不是欺骗大众吗？</strong>。</p>
+<h4>影响高可用的因素</h4>
+<p>老实说，我们很难计算我们设计的系统有多少的可用性，因为影响一个系统的因素实在是太多了，除了软件设计，还有硬件，还有每三方的服务（如电信联通的宽带SLA），当然包括“建筑施工队的挖掘机”。所以，正如SLA的定义，<strong>这不仅仅只是一个技术指标，而是一种服务提供商和用户之间的contract或契约</strong>。<strong>这种工业级的玩法，就像飞机一样，并不是把飞机造出来就好了，还有大量的无比专业的配套设施、工具、流程、管理和运营</strong>。</p>
+<p>简而言之，SLA的几个9就是能持续提供可用服务的级别，不过，工业界中，会把服务不可用的因素分成两种：一种是有计划的，一种是无计划的。</p>
+<h5>无计划的宕机原因</h5>
+<p>下图来自Oracle的 《<a href="https://docs.oracle.com/cd/A91202_01/901_doc/rac.901/a89867/pshavdtl.htm">High Availability Concepts and Best Practices</a>》</p>
+<p>&nbsp;</p>
+<h5><img class="aligncenter size-full wp-image-17467" src="http://coolshell.cn//wp-content/uploads/2016/08/unplaned_downtime.gif" alt="unplaned_downtime" width="600" height="602" />有计划的宕机原因</h5>
+<p>下图来自Oracle的 《<a href="https://docs.oracle.com/cd/A91202_01/901_doc/rac.901/a89867/pshavdtl.htm">High Availability Concepts and Best Practices</a>》</p>
+<p><img class="aligncenter size-full wp-image-17466" src="http://coolshell.cn//wp-content/uploads/2016/08/planned_downtime.gif" alt="planned_downtime" width="600" height="356" /></p>
+<p>&nbsp;</p>
+<p>我们可以看到，上面的宕机原因包括如下：</p>
+<p>无计划的</p>
+<ul>
+<li>系统级的故障 &#8211;  包括主机、操作系统、中间件、数据库、网络、电源以及外围设备</li>
+<li>数据和中介的故障 &#8211; 包括人员误操作、硬盘故障、数据乱了</li>
+<li>还有：自然灾害、人为破坏、以及供电问题。</li>
+</ul>
+<p>有计划的</p>
+<ul>
+<li>日常任务：备份，容量规划，用户和安全管理，后台批处理应用</li>
+<li>运维相关：数据库维护、应用维护、中间件维护、操作系统维护、网络维护</li>
+<li>升级相关：数据库、应用、中间件、操作系统、网络、包括硬件升级</li>
+</ul>
+<h4>真正决定高可用系统的本质原因</h4>
+<p>从上面这些会影响高可用的SLA的因素，你看到了什么？如果你还是只看到了技术方面或是软件设计的东西，那么你只看到了冰山一角。我们再仔细想一想，<strong>那个5个9的SLA在一年内只能是5分钟的不可用时间，5分钟啊，如果按一年只出1次故障，你也得在五分钟内恢复故障，让我们想想，这意味着什么？</strong></p>
+<p><strong>如果你没有一套科学的牛逼的软件工程的管理，没有牛逼先进的自动化的运维工具，没有技术能力很牛逼的工程师团队，怎么可能出现高可用的系统啊</strong>。</p>
+<p>是的，<strong>要干出高可用的系统，这TMD就是一套严谨科学的工程管理</strong>，其中包括但不限于了：</p>
+<ul>
+<li>软件的设计、编码、测试、上线和软件配置管理的水平</li>
+<li>工程师的人员技能水平</li>
+<li>运维的管理和技术水平</li>
+<li>数据中心的运营管理水平</li>
+<li>依赖于第三方服务的管理水平</li>
+</ul>
+<p>深层交的东西则是——对工程这门科学的尊重：</p>
+<ul>
+<li>对待技术的态度</li>
+<li>一个公司的工程文化</li>
+<li>领导者对工程的尊重</li>
+</ul>
+<p><strong>所以，以后有人在你面前提高可用，你要看的不是他的技术设计，而还要看看他们的工程能力，看看他们公司是否真正的尊重工程这门科学</strong>。</p>
+<h4>其它</h4>
+<p>有好些非技术甚至技术人员和我说过，做个APP做个网站，不就是找几个码农过来写写代码嘛。等系统不可用的时候，他们才会明白，要找技术能力比较强的人，但是，<strong>就算你和他们讲一万遍道理，他们也很难会明白写代码怎么就是一种工程了，而工程怎么就成了一门科学了。其实，很多做技术的人都不明白这个道理</strong>。</p>
+<p>包括很多技术人员也永远不会理解，为什么要做好多像Code Review、自动化运维、自动化测试、持续集成之类这样很无聊的东西。就像我在《<a href="http://coolshell.cn/articles/11432.html" target="_blank">从Code Review 谈如何做技术</a>》中提到的，阿里很多的工程师，架构师/专家，甚至资深架构师都没有这个意识，当然，这不怪他们，因为经历决定思维方式，他们的经历的是民用级的系统，做的都是堆功能的工作，的确不需要。</p>
+<p>看完这些，最后让我们都扪心自问一下，你还敢说你的系统是高可用的了么？ ;-)</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-17680" data-post-type="none" ><small class="wp_rp_publish_date">2017年02月02日</small> <a href="http://coolshell.cn/articles/17680.html" class="wp_rp_title">从Gitlab误删除数据库想到的</a></li><li data-position="1" data-poid="in-10910" data-post-type="none" ><small class="wp_rp_publish_date">2014年01月20日</small> <a href="http://coolshell.cn/articles/10910.html" class="wp_rp_title">分布式系统的事务处理</a></li><li data-position="2" data-poid="in-9949" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月05日</small> <a href="http://coolshell.cn/articles/9949.html" class="wp_rp_title">IoC/DIP其实是一种管理思想</a></li><li data-position="3" data-poid="in-5686" data-post-type="none" ><small class="wp_rp_publish_date">2011年10月25日</small> <a href="http://coolshell.cn/articles/5686.html" class="wp_rp_title">多些时间能少写些代码</a></li><li data-position="4" data-poid="in-17737" data-post-type="none" ><small class="wp_rp_publish_date">2017年03月03日</small> <a href="http://coolshell.cn/articles/17737.html" class="wp_rp_title">AWS 的 S3 故障回顾和思考</a></li><li data-position="5" data-poid="in-4811" data-post-type="none" ><small class="wp_rp_publish_date">2011年06月10日</small> <a href="http://coolshell.cn/articles/4811.html" class="wp_rp_title">软件真的好难做啊</a></li><li data-position="6" data-poid="in-5444" data-post-type="none" ><small class="wp_rp_publish_date">2011年09月08日</small> <a href="http://coolshell.cn/articles/5444.html" class="wp_rp_title">千万不要把 bool 设计成函数参数</a></li><li data-position="7" data-poid="in-6775" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月09日</small> <a href="http://coolshell.cn/articles/6775.html" class="wp_rp_title">Bret Victor &#8211; Inventing on Principle</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17459.html/feed</wfw:commentRss>
+		<slash:comments>54</slash:comments>
+		</item>
+		<item>
+		<title>这多年来我一直在钻研的技术</title>
+		<link>http://coolshell.cn/articles/17446.html</link>
+		<comments>http://coolshell.cn/articles/17446.html#comments</comments>
+		<pubDate>Thu, 18 Aug 2016 10:55:17 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[Programmer]]></category>
+		<category><![CDATA[架构]]></category>
+		<category><![CDATA[程序员]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17446</guid>
+		<description><![CDATA[因为我是看到tinyfool 《那些年我赶过的时髦技术趋势》，在赞叹的时候，也让我对我有好些回忆，所以想写一篇回忆贴，本来觉得回忆是件挺让人沮喪的事，因为是老了...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17446.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright wp-image-17450 size-medium" src="http://coolshell.cn//wp-content/uploads/2016/08/Architecture-Internships-Abroad-300x215.jpg" alt="Architecture Internships Abroad" width="300" height="215" />因为我是看到tinyfool 《<a href="http://weibo.com/ttarticle/p/show?id=2309404009795043653572" target="_blank">那些年我赶过的时髦技术趋势</a>》，在赞叹的时候，也让我对我有好些回忆，所以想写一篇回忆贴，本来觉得回忆是件挺让人沮喪的事，因为是老了的表现，但我写着写着，就歪了楼。看来，我还不老，还在拼博。下面是很多我的唠叨，你喜欢就读读，不喜欢就TLDR &#8211; Too Long, Don&#8217;t Read!</p>
+<p>自从98年毕业，到今天，参加工作有18个年头了，加上在大三的时候就为两个在外面接活的老师程序，到今天，写的程序被用到生产线也有18个年头了。</p>
+<h4>背景经历</h4>
+<p>要说明我技术上的“性取向”，还得我说说的我的一些背景和经历。</p>
+<p>我这18年，大约分三个阶段：</p>
+<ul>
+<li><b>1996年-2000年</b>：<b>入门乱来期</b>，大三大四加在银行工作的两年。
+<ul>
+<li><span class="font" style="color: #333333;"><span class="font" style="color: #333333;">用Powerbuilder/Delphi在WindowsNT/SQL Server上做了好多个MIS管理软件，有酒店的，有送水的，有OA的。</span></span></li>
+<li><span class="font" style="color: #333333;"><span class="font" style="color: #333333;"> 用Java的Applet做了一个Web的教学课件，用于在Win95/IE3.0中演示操作系统中的各种调度和算法的动画，得了个全国大学生挑战者杯的鼓励奖。</span></span></li>
+<li><span class="font" style="color: #333333;"> 用Delphi的ISAPI技术以及PHP/ASP给一些公司和大学做过几个网站。</span></li>
+</ul>
+</li>
+</ul>
+<p><span id="more-17446"></span></p>
+<ul>
+<li><b>2000年-2010年</b>：<b>技术学习期</b>，这十年，我主要的编程语言是C/C++。
+<ul>
+<li>前两年在银行用C语言在Unix（AIX/Solaris/Sco Unix/HP-UX..）写各种银行业务（用C语言写），用C写操作SQL，操作界面，写业务交易逻辑，一切都用C……，这是一个C语言的年代，<strong>当时，全国的银行都在做大集中，银行是当时行业里最大的软件系统了，所以，我确定了C/C++/Unix的技术方向</strong>，我当时的网上签名是，<em>C/C++/Unix才是大规模杀伤性武器</em>。</li>
+<li>然后，2002年在Platform做一个全平台的（包括Unix/Linux/Windows）高性能计算的软件产品，很像今天的Hadoop，当时叫Grid Computing，主要用低廉的x86集群进行大规模的并行计算，主要用于芯片设计行业，如：ARM和德州仪器，或是科研，如NASA，或是国家安全，如美国国防部的影像分析，或是3D动画渲染，如怪物史瑞克……从05年以后，发现很多用户开始从Unix迁移到Linux，于是开始更为关注Linux的Kernel知识。<strong>Platform有一套很严谨的软件工程体系，我对严谨的软件工程以及很多的基础的技术的认识在这里形成</strong>。</li>
+<li>2007年在路透做路透全球金融数据Real-Time网络的高性能调优（我在《<a href="http://coolshell.cn/articles/17381.html">性能测试应该怎么做？</a>》一文中透露过这个公司的性能要求，是一个实时的数据网络，对于99.9%的网络传输在100K的tps下要低于1ms，技术挑战是很大的），在路透，我只干一个事，就是性能优化，我把我负责的几个系统的性能都提升了8倍到15倍的样子，09年年底的时候，我已把未来3年的优化的活都干完了。所以，这个时期，我也开始了我的经理生涯。<strong>我对性能调优，高可用系统架构，研发管理的很多是在这里形成的。</strong></li>
+</ul>
+</li>
+<li><b>2010年到今天</b>，<b>技术沉淀期</b>，这个时间段，主要的编程语言是Java。
+<ul>
+<li>这段时间，我加入了Amazon和Alibaba，也就是所谓的互联网公司。在Amazon干了两个事，一个是把Amazon全球的marketplace连起来，跨大洲的数据中心的通信，还有一个是第一次接触大数据和机器学习——用户需求预测系统。在Alibaba干过电商云平台聚石塔和阿里云，去阿里最主要的是经历双十一。</li>
+<li>这段时间，对我影响比较大的是Amazon，技术不再是我的瓶颈，大规模的系统，对我也不是问题，而让我收获最大的是，<strong>世界前沿的软件设计架构和解决方案，以及做技术的态度和工程的方法，我的眼界、脑洞和视野都巨大的打开，并且在技术管理、工程管理、产品管理、人员管理、公司管理等等管理方面的思维有了质的提升</strong>。这段时间，才是我真正技术沉淀的时期。</li>
+</ul>
+</li>
+</ul>
+<p>我的这个背景本来可以更好一些，只可惜运气不太好，本来可以走的更快的，无奈在最关键的时候遇到了两次金融危机，本来可以去硅谷更牛更好的公司见世面，无奈父母身体欠安，只能放弃。</p>
+<h4>经历决定思维方式</h4>
+<p>通过我的背景经历，大家不难看到，我基本上都是做一些规模比较大的系统和软件，而且，主要用C/C++/Unix/Linux这样比较晦涩的语言和操作系统。我们知道用C和C++开发，基本上要处理的错误都是和系统底层相应的东西，而上规模的系统和软件，又总是会遇到很多“稀奇古怪”的问题，这些问题，都会逼着我要去了解很多的操作系统、计算机系统、网络、数据库、中间件等等的各种基础或底层技术。</p>
+<p>而且我经历的基本上都是非常严谨的软件工程，不能马虎，我有几次马虎的经历，给我造成了非常大的心理影响，比如，曾经被定性为不适合写代码，因为我的代码太烂，或是出了严重的故障，几乎要跑路去了。另外，全球gloabl式的oncall，经常让我在凌晨被电话叫起来解决问题，这个经历比较痛苦。所以，<strong>我的整个经历，让我养成了，在软件开发上必需也不得不严谨的习惯和价值观体系</strong>。</p>
+<p><strong>大家想想，用C/C++开发一个几乎不能出故障的软件系统，你需要多仔细和多严谨的态度才能达到要求？</strong>因此，我的经历让我不能马虎，也不能应付工作，更不能在标准上有所妥协，还需要不断地提高标准，所以，时间一长，我必然，会有如下的习惯：</p>
+<ul>
+<li><strong>要做到——知其然，知其所以然</strong>。所以，只能不断的学习基础知识以及和这个技术关联的知识，就像Wikipeida一样，当你进入一个词条的时候，就会伴随时一堆新词条，于是，当多年后，我看到 “<strong><a href="http://coolshell.cn/articles/4235.html" target="_blank">知识广度是深度的副产品</a></strong>”这句话时，简直就是说到我的心里去了。</li>
+</ul>
+<ul>
+<li><strong>要做出工业级的软件</strong>。从银行到Platform到Thomson Reuters再到Amazon，软件开发上都会有SLA的要求。我认为，一个软件是工业级还是民用级的，除了功能正确之外，最重要的一个指标之一就是在性能和稳定性上有没有SLA。绝大多数的互联网公司和开源软件都没有SLA。所以，达不到工业级的标准。<strong>要达到工业级的标准，就需要花费时间、人力和财力进行非常繁琐的设计、测试评估以及运维管理</strong>。</li>
+</ul>
+<ul>
+<li><strong>工业级的软件来自工业级专业人员和专业软件工程</strong>。
+<ul>
+<li><strong>专业的人员</strong>。为什么绝大多数的外国公司需要的是CS（Computer Science）背景毕业的工程师？因为他们要做的是工业级的软件，这是一门科学，即然是科学，就需要受过良好的科学教育的CS专业的人。</li>
+<li><strong>专业的工程</strong>。工业级的软件需要有工业级的软件工程，比如，严谨的Design/Code Review，严格的测试，以及完备的线上运维。</li>
+<li><strong>专业的工具</strong>。这个时候，你就会发现，要做到高级别的SLA，比如包括5个9以上的SLA，人肉干活的能力已经完全跟不上了，你需要大量的专业的与之配套工具。<strong>人类之所以聪明是因为会发明工具，所以，这也是工业级的另一个标准——你有多少现代化的支撑工具？</strong></li>
+</ul>
+</li>
+</ul>
+<p>在之前的《<a href="http://coolshell.cn/articles/11656.html" target="_blank">开发团队的效率</a>》一文中，我说过——<strong>你总需要在一个环节上认真，这个环节越往前就越有效率，越往后你就越没效率</strong>。要么你设计和编码认真点，不然，你就得在测试上认真点。要是你设计、编码、测试都不认真，那你就得在运维上认真，就得在处理故障上认真。你总需要在一个地方认真。</p>
+<p>认真是痛苦和艰难的，也是需要苦苦坚持的，因为人太容易妥协了，这对每个人来说都是一种不小的挑战。老实说，<strong>我与很多人对“认真”的标准不一样，所以，产生了很多分歧，很多人说我太理想了。其实，我能理解他们，一方面是因为我的标准是比较高了，另一方面是他们只做过民用级的软件。</strong></p>
+<p>另外，在一开始，做惯了工业级软件的我极度地不适应于那些糙快猛的开发方式。不过，我也在调整自己，毕竟，世界不只一种价值观，有的是工业级的软件，有的则是民用级的，还有的只是个玩具，而且还有Java这门语言非常有效地屏蔽了很多底层和基础知识，所以，也不可一概而论，我也在适应一些民用级的软件开发的方式。</p>
+<h4>后记</h4>
+<p>从去年我从阿里离开到现在14个月了，这段时间内，我给大约40多家公司做过相应的技术咨询和解决过很多技术问题，绝大多数公司都是因为性能和稳定性的问题来找我的，我给这些公司解决问题的时候，基本都是这样的Pattern：</p>
+<ul>
+<li>一开始，发现都是一些技术知识点的问题，</li>
+<li>然后，马上进入到系统架构方面方面的问题，</li>
+<li>当再解决架构问题的时候，我发现，已经是软件工程的问题，</li>
+<li>而软件工程问题的后面，又是公司管理上的问题</li>
+<li>而公司管理的问题，结果又到了人的问题上</li>
+<li>而人的问题，又到了公司文化的问题……</li>
+</ul>
+<p>你看，很多问题，一环扣一环，最终都不是一个简单的技术问题。我倒不是说，我在抱怨这些问题，我更不是在说能解决这些问题，因为，就像软件工程没有银弹一样，无论你给什么样的解决方案都会有问题，没有问题才是不科学的。我能做的是，观察这个公司的业务形态、和相关的思维方式，以及现有的资源和相应的技术实力，帮助他们从技术到管理上缓解或改善现有的问题。</p>
+<p>所以，我基本上来说，这近20年来，<strong>我只在专心研究一个事——如何做出一个性能高稳定性好的大规模的系统。</strong>在这个方向中，除了很多的基础和底层技术我需要吃透，我还需要在软件的开发工艺，软件工具，以及软件的线上运维，以及相关的管理上不断学习和思考，<strong>因为，只有技术、工具、工程、运维、人员这几个方面搞好了，才可能出现一个性能高且稳定性好的系统</strong>。</p>
+<p>之前对于我来说，我一直在鼓吹先进的管理和软件工程以及技术和工具。今天，对我来说，遇到最大的问题就是，在没有这些所谓的先进的东西的时候，除了我自己上手外，我是否还能解决相应的问题？因为我自己已经完全Scale不开了。</p>
+<p>有问题就有挑战，我每天都在思考，如何在不完美甚至残缺的环境下，解决这些公司的技术问题。每个人都要给自己一个目标。目前，我给自己的目标是——<strong>在残缺的环境下，能让用户不改一行代码，不动任何的架构，不改变用户很糟糕的软件开发的习惯，也不让用户作任何管理上的调整，能提升用户的软件系统的性能和稳定性</strong>。</p>
+<p>因为我相信技术，我相信有更好的技术，可以为用户完全透明的提升性能和稳定性，我大致找到了相应的解，现在，我正在实践的路上，这也许是笔大买卖，所以我不知天高地厚地注册了自己的公司……</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="ex-in_4235" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2011年04月07日</small> <a href="http://coolshell.cn/articles/4235.html" class="wp_rp_title">程序员的谎谬之言还是至理名言？</a></li><li data-position="1" data-poid="ex-in_9156" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2013年03月11日</small> <a href="http://coolshell.cn/articles/9156.html" class="wp_rp_title">《Rework》摘录及感想</a></li><li data-position="2" data-poid="ex-in_10688" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2013年11月13日</small> <a href="http://coolshell.cn/articles/10688.html" class="wp_rp_title">编程能力与编程年龄</a></li><li data-position="3" data-poid="ex-in_11656" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2014年06月09日</small> <a href="http://coolshell.cn/articles/11656.html" class="wp_rp_title">开发团队的效率</a></li><li data-position="4" data-poid="ex-in_10217" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2013年07月24日</small> <a href="http://coolshell.cn/articles/10217.html" class="wp_rp_title">加班与效率</a></li><li data-position="5" data-poid="ex-in_11432" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2014年04月12日</small> <a href="http://coolshell.cn/articles/11432.html" class="wp_rp_title">从Code Review 谈如何做技术</a></li><li data-position="6" data-poid="ex-in_8088" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2012年08月16日</small> <a href="http://coolshell.cn/articles/8088.html" class="wp_rp_title">对技术的态度</a></li><li data-position="7" data-poid="ex-in_17295" data-post-type="own_sourcefeed" ><small class="wp_rp_publish_date">2015年12月13日</small> <a href="http://coolshell.cn/articles/17295.html" class="wp_rp_title">让我们来谈谈分工</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17446.html/feed</wfw:commentRss>
+		<slash:comments>114</slash:comments>
+		</item>
+		<item>
+		<title>缓存更新的套路</title>
+		<link>http://coolshell.cn/articles/17416.html</link>
+		<comments>http://coolshell.cn/articles/17416.html#comments</comments>
+		<pubDate>Wed, 27 Jul 2016 08:25:28 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[Unix/Linux]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[cache]]></category>
+		<category><![CDATA[Design]]></category>
+		<category><![CDATA[design pattern]]></category>
+		<category><![CDATA[Linux]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17416</guid>
+		<description><![CDATA[看到好些人在写更新缓存数据代码时，先删除缓存，然后再更新数据库，而后续的操作会把数据再装载的缓存中。然而，这个是逻辑是错误的。试想，两个并发操作，一个是更新操作...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17416.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-medium wp-image-17422" src="http://coolshell.cn//wp-content/uploads/2016/07/cache-300x158.png" alt="cache" width="300" height="158" srcset="http://coolshell.cn//wp-content/uploads/2016/07/cache-300x158.png 300w, http://coolshell.cn//wp-content/uploads/2016/07/cache.png 600w" sizes="(max-width: 300px) 100vw, 300px" />看到好些人在写更新缓存数据代码时，<strong>先删除缓存，然后再更新数据库</strong>，而后续的操作会把数据再装载的缓存中。<strong>然而，这个是逻辑是错误的</strong>。试想，两个并发操作，一个是更新操作，另一个是查询操作，更新操作删除缓存后，查询操作没有命中缓存，先把老数据读出来后放到缓存中，然后更新操作更新了数据库。于是，在缓存中的数据还是老的数据，导致缓存中的数据是脏的，而且还一直这样脏下去了。</p>
+<p>我不知道为什么这么多人用的都是这个逻辑，当我在微博上发了这个贴以后，我发现好些人给了好多非常复杂和诡异的方案，所以，我想写这篇文章说一下几个缓存更新的Design Pattern（让我们多一些套路吧）。</p>
+<p>这里，我们先不讨论更新缓存和更新数据这两个事是一个事务的事，或是会有失败的可能，我们先假设更新数据库和更新缓存都可以成功的情况（我们先把成功的代码逻辑先写对）。</p>
+<p>更新缓存的的Design Pattern有四种：Cache aside, Read through, Write through, Write behind caching，我们下面一一来看一下这四种Pattern。</p>
+<p><span id="more-17416"></span></p>
+<h4>Cache Aside Pattern</h4>
+<p>这是最常用最常用的pattern了。其具体逻辑如下：</p>
+<ul>
+<li><strong>失效</strong>：应用程序先从cache取数据，没有得到，则从数据库中取数据，成功后，放到缓存中。</li>
+</ul>
+<ul>
+<li><strong>命中</strong>：应用程序从cache中取数据，取到后返回。</li>
+</ul>
+<ul>
+<li><strong>更新</strong>：先把数据存到数据库中，成功后，再让缓存失效。</li>
+</ul>
+<p><img class="aligncenter wp-image-17438 size-full" src="http://coolshell.cn//wp-content/uploads/2016/07/Cache-Aside-Design-Pattern-Flow-Diagram-e1470471723210.png" alt="Cache-Aside-Design-Pattern-Flow-Diagram" width="600" height="188" /></p>
+<p><img class="aligncenter wp-image-17437 size-full" src="http://coolshell.cn//wp-content/uploads/2016/07/Updating-Data-using-the-Cache-Aside-Pattern-Flow-Diagram-1-e1470471761402.png" alt="Updating-Data-using-the-Cache-Aside-Pattern-Flow-Diagram-1" width="600" height="186" /></p>
+<p>注意，我们的更新是先更新数据库，成功后，让缓存失效。那么，这种方式是否可以没有文章前面提到过的那个问题呢？我们可以脑补一下。</p>
+<p>一个是查询操作，一个是更新操作的并发，首先，没有了删除cache数据的操作了，而是先更新了数据库中的数据，此时，缓存依然有效，所以，并发的查询操作拿的是没有更新的数据，但是，更新操作马上让缓存的失效了，后续的查询操作再把数据从数据库中拉出来。而不会像文章开头的那个逻辑产生的问题，后续的查询操作一直都在取老的数据。</p>
+<p>这是标准的design pattern，包括Facebook的论文《<a href="https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf" target="_blank">Scaling Memcache at Facebook</a>》也使用了这个策略。为什么不是写完数据库后更新缓存？你可以看一下Quora上的这个问答《<a href="https://www.quora.com/Why-does-Facebook-use-delete-to-remove-the-key-value-pair-in-Memcached-instead-of-updating-the-Memcached-during-write-request-to-the-backend">Why does Facebook use delete to remove the key-value pair in Memcached instead of updating the Memcached during write request to the backend?</a>》，主要是怕两个并发的写操作导致脏数据。</p>
+<p>那么，是不是Cache Aside这个就不会有并发问题了？不是的，比如，一个是读操作，但是没有命中缓存，然后就到数据库中取数据，此时来了一个写操作，写完数据库后，让缓存失效，然后，之前的那个读操作再把老的数据放进去，所以，会造成脏数据。</p>
+<p>但，这个case理论上会出现，不过，实际上出现的概率可能非常低，因为这个条件需要发生在读缓存时缓存失效，而且并发着有一个写操作。而实际上数据库的写操作会比读操作慢得多，而且还要锁表，而读操作必需在写操作前进入数据库操作，而又要晚于写操作更新缓存，所有的这些条件都具备的概率基本并不大。</p>
+<p><strong>所以，这也就是Quora上的那个答案里说的，要么通过2PC或是Paxos协议保证一致性，要么就是拼命的降低并发时脏数据的概率，而Facebook使用了这个降低概率的玩法，因为2PC太慢，而Paxos太复杂。当然，最好还是为缓存设置上过期时间。</strong></p>
+<h4>Read/Write Through Pattern</h4>
+<p>我们可以看到，在上面的Cache Aside套路中，我们的应用代码需要维护两个数据存储，一个是缓存（Cache），一个是数据库（Repository）。所以，应用程序比较啰嗦。而Read/Write Through套路是把更新数据库（Repository）的操作由缓存自己代理了，所以，对于应用层来说，就简单很多了。<strong>可以理解为，应用认为后端就是一个单一的存储，而存储自己维护自己的Cache。</strong></p>
+<h5>Read Through</h5>
+<p>Read Through 套路就是在查询操作中更新缓存，也就是说，当缓存失效的时候（过期或LRU换出），Cache Aside是由调用方负责把数据加载入缓存，而Read Through则用缓存服务自己来加载，从而对应用方是透明的。</p>
+<h5>Write Through</h5>
+<p>Write Through 套路和Read Through相仿，不过是在更新数据时发生。当有数据更新的时候，如果没有命中缓存，直接更新数据库，然后返回。如果命中了缓存，则更新缓存，然后再由Cache自己更新数据库（这是一个同步操作）</p>
+<p>下图自来Wikipedia的<a href="https://en.wikipedia.org/wiki/Cache_(computing)">Cache词条</a>。其中的Memory你可以理解为就是我们例子里的数据库。</p>
+<p><img class="aligncenter size-full wp-image-17417" src="http://coolshell.cn//wp-content/uploads/2016/07/460px-Write-through_with_no-write-allocation.svg_.png" alt="Write-through_with_no-write-allocation" width="460" height="620" srcset="http://coolshell.cn//wp-content/uploads/2016/07/460px-Write-through_with_no-write-allocation.svg_.png 460w, http://coolshell.cn//wp-content/uploads/2016/07/460px-Write-through_with_no-write-allocation.svg_-223x300.png 223w" sizes="(max-width: 460px) 100vw, 460px" /></p>
+<h4>Write Behind Caching Pattern</h4>
+<p>Write Behind 又叫 Write Back。<strong>一些了解Linux操作系统内核的同学对write back应该非常熟悉，这不就是Linux文件系统的Page Cache的算法吗？是的，你看基础这玩意全都是相通的。</strong>所以，基础很重要，我已经不是一次说过基础很重要这事了。</p>
+<p>Write Back套路，一句说就是，在更新数据的时候，只更新缓存，不更新数据库，而我们的缓存会异步地批量更新数据库。这个设计的好处就是让数据的I/O操作飞快无比（因为直接操作内存嘛 ），因为异步，write backg还可以合并对同一个数据的多次操作，所以性能的提高是相当可观的。</p>
+<p>但是，其带来的问题是，数据不是强一致性的，而且可能会丢失（我们知道Unix/Linux非正常关机会导致数据丢失，就是因为这个事）。在软件设计上，我们基本上不可能做出一个没有缺陷的设计，就像算法设计中的时间换空间，空间换时间一个道理，有时候，强一致性和高性能，高可用和高性性是有冲突的。软件设计从来都是取舍Trade-Off。</p>
+<p>另外，Write Back实现逻辑比较复杂，因为他需要track有哪数据是被更新了的，需要刷到持久层上。操作系统的write back会在仅当这个cache需要失效的时候，才会被真正持久起来，比如，内存不够了，或是进程退出了等情况，这又叫lazy write。</p>
+<p>在wikipedia上有一张write back的流程图，基本逻辑如下：</p>
+<p><img class="aligncenter size-full wp-image-17428" src="http://coolshell.cn//wp-content/uploads/2016/07/Write-back_with_write-allocation.png" alt="Write-back_with_write-allocation" width="640" height="820" srcset="http://coolshell.cn//wp-content/uploads/2016/07/Write-back_with_write-allocation.png 640w, http://coolshell.cn//wp-content/uploads/2016/07/Write-back_with_write-allocation-234x300.png 234w" sizes="(max-width: 640px) 100vw, 640px" /></p>
+<p>&nbsp;</p>
+<h4>再多唠叨一些</h4>
+<p>1）上面讲的这些Design Pattern，其实并不是软件架构里的mysql数据库和memcache/redis的更新策略，这些东西都是计算机体系结构里的设计，比如CPU的缓存，硬盘文件系统中的缓存，硬盘上的缓存，数据库中的缓存。<strong>基本上来说，这些缓存更新的设计模式都是非常老古董的，而且历经长时间考验的策略</strong>，所以这也就是，工程学上所谓的Best Practice，遵从就好了。</p>
+<p>2）有时候，我们觉得能做宏观的系统架构的人一定是很有经验的，其实，宏观系统架构中的很多设计都来源于这些微观的东西。比如，云计算中的很多虚拟化技术的原理，和传统的虚拟内存不是很像么？Unix下的那些I/O模型，也放大到了架构里的同步异步的模型，还有Unix发明的管道不就是数据流式计算架构吗？TCP的好些设计也用在不同系统间的通讯中，仔细看看这些微观层面，你会发现有很多设计都非常精妙……所以，<strong>请允许我在这里放句观点鲜明的话——如果你要做好架构，首先你得把计算机体系结构以及很多老古董的基础技术吃透了</strong>。</p>
+<p>3）在软件开发或设计中，我非常建议在之前先去参考一下已有的设计和思路，<strong>看看相应的guideline，best practice或design pattern，吃透了已有的这些东西，再决定是否要重新发明轮子</strong>。千万不要似是而非地，想当然的做软件设计。</p>
+<p>4）上面，我们没有考虑缓存（Cache）和持久层（Repository）的整体事务的问题。比如，更新Cache成功，更新数据库失败了怎么吗？或是反过来。关于这个事，如果你需要强一致性，你需要使用“两阶段提交协议”——prepare, commit/rollback，比如Java 7 的<a href="http://docs.oracle.com/javaee/7/api/javax/transaction/xa/XAResource.html" target="_blank">XAResource</a>，还有MySQL 5.7的 <a href="http://dev.mysql.com/doc/refman/5.7/en/xa.html" target="_blank">XA Transaction</a>，有些cache也支持XA，比如<a href="http://www.ehcache.org/documentation/3.0/xa.html" target="_blank">EhCache</a>。当然，XA这样的强一致性的玩法会导致性能下降，关于分布式的事务的相关话题，你可以看看《<a href="http://coolshell.cn/articles/10910.html" target="_blank">分布式系统的事务处理</a>》一文。</p>
+<p>（全文完）</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-7236" data-post-type="none" ><small class="wp_rp_publish_date">2012年05月03日</small> <a href="http://coolshell.cn/articles/7236.html" class="wp_rp_title">用Unix的设计思想来应对多变的需求</a></li><li data-position="1" data-poid="in-8961" data-post-type="none" ><small class="wp_rp_publish_date">2013年02月01日</small> <a href="http://coolshell.cn/articles/8961.html" class="wp_rp_title">从面向对象的设计模式看软件设计</a></li><li data-position="2" data-poid="in-6950" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月26日</small> <a href="http://coolshell.cn/articles/6950.html" class="wp_rp_title">需求变化与IoC</a></li><li data-position="3" data-poid="in-9949" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月05日</small> <a href="http://coolshell.cn/articles/9949.html" class="wp_rp_title">IoC/DIP其实是一种管理思想</a></li><li data-position="4" data-poid="in-10249" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月30日</small> <a href="http://coolshell.cn/articles/10249.html" class="wp_rp_title">7个示例科普CPU Cache</a></li><li data-position="5" data-poid="in-21" data-post-type="none" ><small class="wp_rp_publish_date">2009年03月02日</small> <a href="http://coolshell.cn/articles/21.html" class="wp_rp_title">101个设计模式</a></li><li data-position="6" data-poid="in-3320" data-post-type="none" ><small class="wp_rp_publish_date">2010年11月26日</small> <a href="http://coolshell.cn/articles/3320.html" class="wp_rp_title">JDK里的设计模式</a></li><li data-position="7" data-poid="in-4626" data-post-type="none" ><small class="wp_rp_publish_date">2011年05月03日</small> <a href="http://coolshell.cn/articles/4626.html" class="wp_rp_title">读书笔记：对线程模型的批评</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17416.html/feed</wfw:commentRss>
+		<slash:comments>66</slash:comments>
+		</item>
+		<item>
+		<title>为什么我不在微信公众号上写文章</title>
+		<link>http://coolshell.cn/articles/17391.html</link>
+		<comments>http://coolshell.cn/articles/17391.html#comments</comments>
+		<pubDate>Mon, 11 Jul 2016 01:08:40 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[Blog]]></category>
+		<category><![CDATA[search]]></category>
+		<category><![CDATA[传播]]></category>
+		<category><![CDATA[影响]]></category>
+		<category><![CDATA[微信]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17391</guid>
+		<description><![CDATA[很多朋友问我为什么不在微信公众号上写文章。我都没有直接回答，老实说，我也是扭扭捏捏的，才去开了个个人的微信的公众号，而且还只能搜索我博客这边的文章，我承认现在的...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17391.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-medium wp-image-17394" src="http://coolshell.cn//wp-content/uploads/2016/07/Community-300x161.jpg" alt="Community" width="300" height="161" srcset="http://coolshell.cn//wp-content/uploads/2016/07/Community-300x161.jpg 300w, http://coolshell.cn//wp-content/uploads/2016/07/Community-768x412.jpg 768w, http://coolshell.cn//wp-content/uploads/2016/07/Community.jpg 838w" sizes="(max-width: 300px) 100vw, 300px" />很多朋友问我为什么不在微信公众号上写文章。我都没有直接回答，老实说，我也是扭扭捏捏的，才去开了个个人的微信的公众号，而且还只能搜索我博客这边的文章，我承认现在的阅读都在移动端，而且微信的公众号是国内移动端的文章流量及分享的入口，但是我还是更愿意使用blog这样的方式分享文章，最多也是在blog这边写好文章后，再去微信公众号那边贴一下。这个原因，不是因为我是一个老顽固，有习惯思维，而是，我不觉得微信公众号是一个好的信息传播和交流的平台。</p>
+<p><strong>我下面的言论仅仅代表我的个人观点，我不想强加给别人，我只是想说明一下为什么我不把我的blog迁移到微信公众号上。</strong></p>
+<p>首先，互联网是开放和共享的，不是封闭的。信息的传播更是需要开放的，大家可以看看<a href="http://coolshell.cn/articles/11928.html" target="_blank">互联网之子</a>。</p>
+<ul>
+<li>我希望我的文章能够被rss feed到各种阅读器中。</li>
+<li>我希望我的文章可以被搜索引擎所检索到。</li>
+<li>我希望我的文章能被别人整理，与其它人的文章放在一起互补。</li>
+<li>我希望我的文章能被修改，因为文章会有错误，也会需要时常更新。</li>
+</ul>
+<p>然而，微信公众号都不能很好的支持。我希望我的文章能成为生态圈的里的一部份。所谓生态圈是相互融合，不是唯我独尊。这个和做开源软件的道理一样，开源软件不是把源代码开出来就好了，而是要去和已有的其它软件互相融合，互相兼容，互相支持，这本就是软件设计的真谛（参看《UNIX编程艺术》）。所以，我想，写文章也一样。</p>
+<p>下面是我觉得文章传播的姿势。</p>
+<p><span id="more-17391"></span></p>
+<h4>文章传播的姿势</h4>
+<p><strong>我希望我的文章是被检索的，这意味着，就算文章写过了好多年，它依然可以被检索到，而不是在社交圈上被大众转了3-4天后就完了，然后再也没有然后了</strong>。</p>
+<p style="padding-left: 30px;">今天，我十多年前写的文章依然可以被检索到，依然对后来的新人有帮助。因为我的文章被搜索引擎检索了，我的文章被转载fork出去了，被人引用和标注，所以，可以长期被传播。</p>
+<p style="padding-left: 30px;">今天的酷壳（CoolShell.cn）已经很长时间没有更新了，然而里面的很多文章依然在被转发着，在被搜索着，在被重复阅读和被人推荐着，文章不断的被后来的人阅读。这就是被检索被共享被转载的好处。</p>
+<p>同时，我并不希望成为某个平台写文章的苦力。在微信公众号下，你需要不断的更新才会积累起人气（订阅者），而文章的保鲜期非常有限，因为不能被检索，所以，你写的越多，你过去的文章也会被遗忘的越快。<strong>而微信公众平台让能写文章的人好像成为了这个平台的一个写作的奴隶，而不是让他们的文章中的内容和观点可以有长时间的影响力</strong>。换言之，在社交网络上，如果你要有影响力，你就要使劲写，需要更多的粉丝和订阅者。我个人认为这是违反了信息传播规律的。</p>
+<p><strong>最重要的是，我希望我的文章和观点是有讨论的，希望我的文章能被指正和批评，最好是引发讨论和思辨</strong>，这样才会让我们每一个人都可以在交流中成长。<strong>很多时候，文章本身并没有什么太大的价值，而引发的讨论和思辨才更有价值，这是我认为文章传播最正确的姿势。而微信的公众号在讨论方面人为的阻止或大大消弱了大家的沟通和讨论</strong>。虽然我承认有些讨论也是无效的，而且还有漫骂和跑题，但是我依然觉得讨论的利大于弊。</p>
+<p>我私以为，<strong>信息的传播正确姿势，是被检索、讨论、引用、整理、补充和更新，而不是社交网络的转发、点赞、粉丝、订阅和打赏</strong>。</p>
+<p>换句话说，<strong>我关注的是的文章的长期价值，而不是短期的表象</strong>。</p>
+<h4>关于文章的版权</h4>
+<p>很多人认为，封闭的平台有个比开放平台天然的优势，就是盗版和抄袭的问题，可以通过平台举报和惩罚对方。我以前也受到一些被抄袭和盗用的困扰，还曾经拿起来法律的武器维护自己的权利。</p>
+<p>可能是我经历这样的事情比较早，所以，我今天在这个问题上不纠结了。</p>
+<p style="padding-left: 30px;">1、好的有价值的文章总是被人盗用抄袭的，这也算是对作者的一种认可吧。</p>
+<p style="padding-left: 30px;">2、我从来没有见过有人靠抄袭和盗用别人文章而成功的，无非就是收获几个赞罢了。</p>
+<p style="padding-left: 30px;">3、原创文章被人过抄袭和盗用，反而容易得到更多的关注。</p>
+<p><strong>微信公众号的原创保护也只是局限在微信上，微信之外的平台，它也无能为力，所以，对于我的文章会被转到很多地方的这种情况来看，微信公众号的原创保护也非常有限。</strong></p>
+<p>现在，我倒是不纠结有人会盗用和抄袭我的文章，因为，一方面，你可以有一些小伎俩来保护你的文章，比如在文章内容中放入一些你自己特有的标识，另一方面，我的文章被人盗用了抄袭的时候，总有一些网友能在盗用者那边指出来原文章是什么，并批评之。<strong>所以，还是应该把主要精力放在文章的内容和质量上，并让文章可以被检索和被更多的地方所引用，这样，你的文章才会得到最大的保护</strong>。</p>
+<p>另外，<strong>既然别人对我的文章有抄袭和盗用的需求，要不我就让别人干得更体面一些。所以，我的文章完全可以自由的转载，但不得用于商业目的，只需要注明作者和出处就好了</strong>。</p>
+<p>&nbsp;</p>
+<h4>关于写文章挣钱</h4>
+<p>首先，如果你觉得写文章出书是可以挣钱的，那么你可以洗洗睡了，尤其是在中国，这几乎是不可能的。</p>
+<p>当然，你要挣点小钱是可以有的，但是，你需要写软文中植入广告，或是消费热点主题，比如前段时间的魏则西事件，有的公众号被打赏了一些钱。</p>
+<p>老实说，这对我来说完全无感，因为，我的逻辑是这样的：<strong>我觉得一个人有一定的影响力，其中有很大一部份原因来自他的独立性，如果我开始写软文了，相当于我把自己卖了</strong>。</p>
+<p>所以，我现在从来不通过写文章挣钱，因为我会写代码，我还是通过我的技能挣钱，通过给一些公司做咨询、培训、企业服务挣钱，老实说，靠自己的能力挣钱，比写文章挣钱挣得多多了，因为我觉得，<strong>像我写的这类的文章本来就是用来分享和传播的，不是用来挣钱的。写文章的目的是分享和影响，不是挣钱。</strong></p>
+<p>关于独立性，这里说两个花絮吧——</p>
+<p style="padding-left: 30px;">我在Amazon的时候，我和公司讲，我想在我的博客上写几篇关于亚马逊的文章，介绍亚马逊的技术和一些做事的方法，也算是个宣传，让我的团队也好招人，但是，我当时的老板和我说，你的博客之所以有影响力是因为你的独立性，不要写亚马逊的，这样会把你自己卖了，千万别这么做。</p>
+<p style="padding-left: 30px;">然而，我在Alibaba的时候，我的大老板要求我用我的博客和微博帮阿里云做营销，我非常委婉地拒绝了，结果，团队合作的价值观不达标了。呵呵。</p>
+<p>P.S. 本来酷壳上是不做广告的，今天，酷壳上也广告，但是广告费是全部捐给Wikipedia的，广告主的钱是没有到我的手的。</p>
+<p>微信公众号上的文章都有软文和广告植放，我觉得这不是我的调调，我害怕微信公众平台的整体格调影响了我的格调。就好像我认为我的网络被百度检索到了会我的网站的格调下降好几个档次。所以，我还是保持一定的距离吧。</p>
+<p><strong>这么说吧，我写文章不是为了挣钱，我也不认为写文章能挣到钱，我写文章就是为了分享和影响，我会借助社交网络，但不会寄宿在社交网络上，更不会被社交网络所绑架。</strong></p>
+<p>谢谢看我的唠叨！</p>
+<p>（全文完）</p>
+<p>&nbsp;</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-8422" data-post-type="none" ><small class="wp_rp_publish_date">2012年10月24日</small> <a href="http://coolshell.cn/articles/8422.html" class="wp_rp_title">TF-IDF模型的概率解释</a></li><li data-position="1" data-poid="in-1092" data-post-type="none" ><small class="wp_rp_publish_date">2009年06月30日</small> <a href="http://coolshell.cn/articles/1092.html" class="wp_rp_title">Top 200的全球开发者BLOG</a></li><li data-position="2" data-poid="in-8031" data-post-type="none" ><small class="wp_rp_publish_date">2012年08月12日</small> <a href="http://coolshell.cn/articles/8031.html" class="wp_rp_title">InfoQ的ArchSummit大会对我的采访</a></li><li data-position="3" data-poid="in-3231" data-post-type="none" ><small class="wp_rp_publish_date">2010年10月26日</small> <a href="http://coolshell.cn/articles/3231.html" class="wp_rp_title">你和你的工作</a></li><li data-position="4" data-poid="in-3489" data-post-type="none" ><small class="wp_rp_publish_date">2011年01月17日</small> <a href="http://coolshell.cn/articles/3489.html" class="wp_rp_title">Linux的cycle日历（你懂的）</a></li><li data-position="5" data-poid="in-3089" data-post-type="none" ><small class="wp_rp_publish_date">2010年10月09日</small> <a href="http://coolshell.cn/articles/3089.html" class="wp_rp_title">Google未公开API：转MAC地址为经纬度</a></li><li data-position="6" data-poid="in-4990" data-post-type="none" ><small class="wp_rp_publish_date">2011年07月18日</small> <a href="http://coolshell.cn/articles/4990.html" class="wp_rp_title">程序员技术练级攻略</a></li><li data-position="7" data-poid="in-8961" data-post-type="none" ><small class="wp_rp_publish_date">2013年02月01日</small> <a href="http://coolshell.cn/articles/8961.html" class="wp_rp_title">从面向对象的设计模式看软件设计</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17391.html/feed</wfw:commentRss>
+		<slash:comments>209</slash:comments>
+		</item>
+		<item>
+		<title>性能测试应该怎么做？</title>
+		<link>http://coolshell.cn/articles/17381.html</link>
+		<comments>http://coolshell.cn/articles/17381.html#comments</comments>
+		<pubDate>Tue, 05 Jul 2016 17:03:26 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[流程方法]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[Performance]]></category>
+		<category><![CDATA[test]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17381</guid>
+		<description><![CDATA[偶然间看到了阿里中间件Dubbo的性能测试报告，我觉得这份性能测试报告让人觉得做这性能测试的人根本不懂性能测试，我觉得这份报告会把大众带沟里去，所以，想写下这篇...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17381.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-full wp-image-17383" src="http://coolshell.cn//wp-content/uploads/2016/07/PerfTest.png" alt="PerfTest" width="300" height="277" />偶然间看到了阿里中间件<a href="http://dubbo.io/User+Guide-zh.htm#UserGuide-zh-%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A" target="_blank">Dubbo的性能测试报告</a>，我觉得这份性能测试报告让人觉得做这性能测试的人根本不懂性能测试，我觉得这份报告会把大众带沟里去，所以，想写下这篇文章，做一点科普。</p>
+<p>首先，这份测试报告里的主要问题如下：</p>
+<p><strong>1）用的全是平均值</strong>。老实说，平均值是非常不靠谱的。</p>
+<p><strong>2）响应时间没有和吞吐量TPS/QPS挂钩</strong>。而只是测试了低速率的情况，这是完全错误的。</p>
+<p><strong>3）响应时间和吞吐量没有和成功率挂钩。</strong></p>
+<p><span id="more-17381"></span></p>
+<h4>为什么平均值不靠谱</h4>
+<p>关于平均值为什么不靠谱，我相信大家读新闻的时候经常可以看到，<strong>平均工资</strong>，<strong>平均房价</strong>，<strong>平均支出</strong>，等等这样的字眼，<span id="zoom" class="show_c">你就知道为什么平均值不靠谱了。（这些都是数学游戏，对于理工科的同学来说，天生应该有免疫力）</span></p>
+<p>软件的性能测试也一样，平均数也是不靠谱的，这里可以参看这篇详细的文章《<a href="http://apmblog.dynatrace.com/2012/11/14/why-averages-suck-and-percentiles-are-great/" target="_blank">Why Averages Suck and Percentiles are Great</a>》，我在这里简单说一下。</p>
+<p>我们知道，性能测试时，测试得到的结果数据不总是一样的，而是有高有低的，如果算平均值就会出现这样的情况，假如，测试了10次，有9次是1ms，而有1次是1s，那么平均数据就是100ms，很明显，这完全不能反应性能测试的情况，也许那1s的请求就是一个不正常的值，是个噪点，应该去掉。所以，我们会在一些评委打分中看到要去掉一个最高分一个最低分，然后再算平均值。</p>
+<p>另外，中位数（Mean）可能会比平均数要稍微靠谱一些，所谓中位数的意就是把将一组数据按大小顺序排列，处在最中间位置的一个数叫做这组数据的中位数 ，这意味着至少有50%的数据低于或高于这个中位数。</p>
+<p>当然，最为正确的统计做法是用百分比分布统计。也就是英文中的TP &#8211; Top Percentile ，TP50的意思在，50%的请求都小于某个值，TP90表示90%的请求小于某个时间。</p>
+<p>比如：我们有一组数据：[ 10ms,  1s, 200ms, 100ms]，我们把其从小到大排个序：[10ms, 100ms, 200ms, 1s]，于是我们知道，TP50，就是50%的请求ceil(4*0.5)=2时间是小于100ms的，TP90就是90%的请求ceil(4*0.9)=4时间小于1s。于是：TP50就是100ms，TP90就是1s。</p>
+<p>我以前在路透做的金融系统响应时间的性能测试的要求是这样的，<strong>99.9%的请求必须小于1ms，所有的平均时间必须小于1ms。两个条件的限制。</strong></p>
+<h4>为什么响应时间（latency）要和吞吐量（Thoughput）挂钩</h4>
+<p>系统的性能如果只看吞吐量，不看响应时间是没有意义的。我的系统可以顶10万请求，但是响应时间已经到了5秒钟，这样的系统已经不可用了，这样的吞吐量也是没有意义的。</p>
+<p>我们知道，当并发量（吞吐量）上涨的时候，系统会变得越来越不稳定，响应时间的波动也会越来越大，响应时间也会变得越来越慢，而吞吐率也越来越上不去（如下图所示），包括CPU的使用率情况也会如此。所以，当系统变得不稳定的时候，吞吐量已经没有意义了。吞吐量有意义的时候仅当系统稳定的时候。</p>
+<p><img class="aligncenter size-full wp-image-17382" src="http://coolshell.cn//wp-content/uploads/2016/07/BenchmarkOptimalRate.png" alt="BenchmarkOptimalRate" width="535" height="343" srcset="http://coolshell.cn//wp-content/uploads/2016/07/BenchmarkOptimalRate.png 535w, http://coolshell.cn//wp-content/uploads/2016/07/BenchmarkOptimalRate-300x192.png 300w" sizes="(max-width: 535px) 100vw, 535px" /></p>
+<p>所以，<strong>吞吐量的值必需有响应时间来卡。</strong>比如：<strong>TP99小于100ms的时候，系统可以承载的最大并发数是1000qps</strong>。这意味着，我们要不断的在不同的并发数上测试，以找到软件的最稳定时的最大吞吐量。</p>
+<p>&nbsp;</p>
+<h4>为什么响应时间吞吐量和成功率要挂钩</h4>
+<p>我们这应该不难理解了，如果请求不成功的话，都还做毛的性能测试。比如，我说我的系统并发可以达到10万，但是失败率是</p>
+<p>40%，那么，这10万的并发完全就是一个笑话了。</p>
+<p>性能测试的失败率的容忍应该是非常低的。对于一些关键系统，成功请求数必须在100%，一点都不能含糊。</p>
+<p>&nbsp;</p>
+<h4>如何严谨地做性能测试</h4>
+<p>一般来说，性能测试要统一考虑这么几个因素：<strong>Thoughput吞吐量</strong>，<strong>Latency响应时间</strong>，<strong>资源利用</strong>（CPU/MEM/IO/Bandwidth&#8230;），<strong>成功率</strong>，<strong>系统稳定性</strong>。</p>
+<p>下面的这些性能测试的方式基本上来源自我的老老东家汤森路透，一家做real-time的金融数据系统的公司。</p>
+<p style="padding-left: 30px;"><strong>一，你得定义一个系统的响应时间latency，建议是TP99，以及成功率</strong>。比如路透的定义：99.9%的响应时间必需在1ms之内，平均响应时间在1ms以内，100%的请求成功。</p>
+<p style="padding-left: 30px;"><strong>二，在这个响应时间的限制下，找到最高的吞吐量</strong>。测试用的数据，需要有大中小各种尺寸的数据，并可以混合。最好使用生产线上的测试数据。</p>
+<p style="padding-left: 30px;"><strong>三，在这个吞吐量做Soak Test，比如：使用第二步测试得到的吞吐量连续7天的不间断的压测系统。</strong>然后收集CPU，内存，硬盘/网络IO，等指标，查看系统是否稳定，比如，CPU是平稳的，内存使用也是平稳的。那么，这个值就是系统的性能</p>
+<p style="padding-left: 30px;"><strong>四，找到系统的极限值。比如：在成功率100%的情况下（不考虑响应时间的长短），系统能坚持10分钟的吞吐量。</strong></p>
+<p style="padding-left: 30px;"><strong>五，做Burst Test。用第二步得到的吞吐量执行5分钟，然后在第四步得到的极限值执行1分钟，再回到第二步的吞吐量执行5钟，再到第四步的权限值执行1分钟，如此往复个一段时间，比如2天。</strong>收集系统数据：CPU、内存、硬盘/网络IO等，观察他们的曲线，以及相应的响应时间，确保系统是稳定的。</p>
+<p style="padding-left: 30px;"><strong>六、低吞吐量和网络小包的测试。</strong>有时候，在低吞吐量的时候，可能会导致latency上升，比如TCP_NODELAY的参数没有开启会导致latency上升（详见<a href="http://coolshell.cn/articles/11564.html" target="_blank">TCP的那些事</a>），而网络小包会导致带宽用不满也会导致性能上不去，所以，性能测试还需要根据实际情况有选择的测试一下这两咱场景。</p>
+<p>（注：在路透，路透会用第二步得到的吞吐量乘以66.7%来做为系统的软报警线，80%做为系统的硬报警线，而极限值仅仅用来扛突发的peak）</p>
+<p><strong>是不是很繁锁？是的，只因为，这是工程，工程是一门科学，科学是严谨的。</strong></p>
+<p>欢迎大家也分享一下你们性能测试的经验和方法。</p>
+<p>（全文完）</p>
+<p>&nbsp;</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-7490" data-post-type="none" ><small class="wp_rp_publish_date">2012年06月20日</small> <a href="http://coolshell.cn/articles/7490.html" class="wp_rp_title">性能调优攻略</a></li><li data-position="1" data-poid="in-8593" data-post-type="none" ><small class="wp_rp_publish_date">2012年11月20日</small> <a href="http://coolshell.cn/articles/8593.html" class="wp_rp_title">如何测试洗牌程序</a></li><li data-position="2" data-poid="in-8767" data-post-type="none" ><small class="wp_rp_publish_date">2012年12月19日</small> <a href="http://coolshell.cn/articles/8767.html" class="wp_rp_title">Web工程师的工具箱</a></li><li data-position="3" data-poid="in-10910" data-post-type="none" ><small class="wp_rp_publish_date">2014年01月20日</small> <a href="http://coolshell.cn/articles/10910.html" class="wp_rp_title">分布式系统的事务处理</a></li><li data-position="4" data-poid="in-9703" data-post-type="none" ><small class="wp_rp_publish_date">2013年05月30日</small> <a href="http://coolshell.cn/articles/9703.html" class="wp_rp_title">无锁HashMap的原理与实现</a></li><li data-position="5" data-poid="in-11454" data-post-type="none" ><small class="wp_rp_publish_date">2014年04月17日</small> <a href="http://coolshell.cn/articles/11454.html" class="wp_rp_title">从LongAdder看更高效的无锁实现</a></li><li data-position="6" data-poid="in-6470" data-post-type="none" ><small class="wp_rp_publish_date">2012年01月16日</small> <a href="http://coolshell.cn/articles/6470.html" class="wp_rp_title">由12306.cn谈谈网站性能技术 </a></li><li data-position="7" data-poid="in-6790" data-post-type="none" ><small class="wp_rp_publish_date">2012年03月13日</small> <a href="http://coolshell.cn/articles/6790.html" class="wp_rp_title">多版本并发控制(MVCC)在分布式系统中的应用</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17381.html/feed</wfw:commentRss>
+		<slash:comments>47</slash:comments>
+		</item>
+		<item>
+		<title>让我们来谈谈分工</title>
+		<link>http://coolshell.cn/articles/17295.html</link>
+		<comments>http://coolshell.cn/articles/17295.html#comments</comments>
+		<pubDate>Sun, 13 Dec 2015 04:55:52 +0000</pubDate>
+		<dc:creator><![CDATA[陈皓]]></dc:creator>
+				<category><![CDATA[技术管理]]></category>
+		<category><![CDATA[杂项资源]]></category>
+		<category><![CDATA[Division of Labour]]></category>
+		<category><![CDATA[manager]]></category>
+		<category><![CDATA[Programmer]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17295</guid>
+		<description><![CDATA[昨天，我看到一个新闻——雅虎取消了QA团队，工程师必须自己负责代码质量，并使用持续集成代替QA。 同时，也听到网友说，“听微软做数据库运维的工程师介绍，他们也是...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17295.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><img class="alignright size-full wp-image-17298" src="http://coolshell.cn//wp-content/uploads/2015/12/Division_of_Labour.jpeg" alt="Division of Labour" width="311" height="210" srcset="http://coolshell.cn//wp-content/uploads/2015/12/Division_of_Labour.jpeg 311w, http://coolshell.cn//wp-content/uploads/2015/12/Division_of_Labour-300x203.jpeg 300w" sizes="(max-width: 311px) 100vw, 311px" />昨天，我看到<a href="http://spectrum.ieee.org/view-from-the-valley/computing/software/yahoos-engineers-move-to-coding-without-a-net" target="_blank">一个新闻</a>——雅虎取消了QA团队，工程师必须自己负责代码质量，并使用持续集成代替QA。 同时，也听到网友说，“听微软做数据库运维的工程师介绍，他们也是把运维工程师和测试工程师取消了，由开发全部完成。每个人都是全栈工程师”。于是，我顺势引用了几年前写过一篇文章《<a href="http://coolshell.cn/articles/6994.html" target="_blank">我们需要专职的QA吗？</a>》，并且又鼓吹了一下全栈。当然，一如既往的得到了一些的争议和嘲弄;-)。</p>
+<p>有人认为取消QA基本上是公司没钱的象征，这个观点根本不值一驳，属于井底之蛙。有人认为，社会分工是大前提，并批评我说怎么不说把所有的事全干的，把我推向了另外一个极端。另外，你千万不要以为有了分工，QA的工作就保得住了。</p>
+<p>就像《乔布斯传》中乔布斯质疑财务制度的时候说的，有时候，很多人都不问为什么，觉得存在的东西都是理所应当的东西。让我们失去了独立思考的机会。分工也是一样。</p>
+<p>所以，为了说完整分工这个逻辑。请大家耐住性子，让我就先来谈谈“分工的优缺点”吧。</p>
+<p><span id="more-17295"></span></p>
+<h4>分工的优点和缺点</h4>
+<p>首先，分工（Division of Labour）应该是由 <a href="https://en.wikipedia.org/wiki/Adam_Smith" target="_blank">Adam Smith</a> 在1776年的《<a href="https://en.wikipedia.org/wiki/The_Wealth_of_Nations" target="_blank">国富论</a>》中提出来的，Adam在那时候就观察到分工对于手工业生产效率的提高。他将效率提高的原因归结于三点：</p>
+<ul>
+<li>熟练程度的增加。当一个工人单纯地重复同一道工序时，其对这道工序的熟练程度会大幅增加。<strong>表现为产量和质量的提高</strong>。</li>
+<li>如果没有分工，由一道工序转为另一道工序时会损失时间，而分工避免了这中间的损失。</li>
+<li>由于对于工序的了解和熟练度的增加，<strong>更有效率的机械和工具被发明出来，从而提高了产量</strong>。</li>
+</ul>
+<p>分工的确是提高生产力。我想到了福特公司一开始做出来的汽车几乎卖不出去，原因有两个，一个是成本太高，另外是生产太复杂，产能太低。于是福特公司开始把制造一辆汽车的工序分解开来，进行分工，分工给福特公司带来的好处是：</p>
+<ol>
+<li>很多工作可以并行了，而且<strong>因为事情变得简单后，执行力也变强了</strong></li>
+<li>一个非常复杂和高深的汽车制造因为分工后，<strong>很多工作不需要很NB的人来干了，只需要一般劳动者经过简单的培训就可以干了</strong>。而且，越干越熟练，越干越专业，最终可能让合适的人合适的事。</li>
+<li>分工后导致了很多重复劳动可以用技术来解决，于是福特公司出现生产流水线的技术（你是否还记得卓别林《摩登时代》里的工业生产流水线的场景，那取自福特公司）。</li>
+</ol>
+<p>于是，福特公司的生产效率大大提高，最终实现了让每个美国家庭都能买得起汽车的理想，同时让美国成为了轮子上的国家。</p>
+<p>不过，我们需要注意的是，在《国富论》中，Adam他同时也提到，分工如果过细，同样会带来问题——<strong>简单重复的劳动会让人变成一个不会思考的机器，从而越来越笨，进而变成平庸的无技能的人</strong>。自“分工”出现以后，争论就没有停止过。</p>
+<p>Karl Max同样认为<strong>分工越来越细，会导致人的技术越来越差，同时，大量的重复劳动也会导致人对工作的失出热情，产生厌倦和抵触心理，最终会导致生产力的下降</strong>。</p>
+<p>同时，还有一些经济学家也同样表明分工的一些缺点：</p>
+<ul>
+<li><strong>导致人只关注整个事情中的一小块，缺乏全局视角，导致视野受限，没有完全领会工作的意义和目标，从而导致各种返工</strong>。</li>
+</ul>
+<ul>
+<li><strong>对于组织而言，分工也会导致出现大量的沟通协同成本，并出现碎片的生产方式，以及组织的孤岛形式，并不利于提高生产力</strong>。</li>
+</ul>
+<p>当然，奥地利经济学家<a title="Ludwig von Mises" href="https://en.wikipedia.org/wiki/Ludwig_von_Mises">Ludwig von Mises</a> 并不这么认为，他认为，在分工所得到的好处面前，这些副作用不算什么。并且，他认为在资本主义的制度下，完全是可以平衡分工的各种优点和各种缺点，从而可以达到提高生产力和提高人员素质的双赢解的。</p>
+<p>比如说，<strong>分工中的各种沟通问题是可以通过一个标准协议来解的</strong>，造灯泡的，造开关的，造灯座的完全不知道对方的存在，他们只所以可以让做出来的东西拼在一起，完全是通过了一种标准协议完成的。<strong>这也是为什么这个世界上有各种各样的标准化的组织</strong>。</p>
+<p>还有很多经济学家对分工都有自己的见解和想法。不过基本上就是上面这些Pros和Cons了。下图是一个PPT的两个slids，可以点击看大图（<a href="http://www.slideshare.net/kamran121/lecture-5-10123392" target="_blank">来源</a>）</p>
+<table>
+<tbody>
+<tr>
+<td><a href="http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-10-728.jpg" target="_blank"><img class="aligncenter wp-image-17299" src="http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-10-728.jpg" alt="lecture-5-10-728" width="391" height="293" srcset="http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-10-728.jpg 728w, http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-10-728-300x225.jpg 300w" sizes="(max-width: 391px) 100vw, 391px" /></a></td>
+<td><a href="http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-11-728.jpg" target="_blank"><img class="aligncenter wp-image-17300" src="http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-11-728.jpg" alt="lecture-5-11-728" width="372" height="279" srcset="http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-11-728.jpg 728w, http://coolshell.cn//wp-content/uploads/2015/12/lecture-5-11-728-300x225.jpg 300w" sizes="(max-width: 372px) 100vw, 372px" /></a></td>
+</tr>
+</tbody>
+</table>
+<h4>全球化下的分工</h4>
+<p>分工带来问题在全球化的浪潮下变得尤为突出。其委婉地被讲成是比较优势（<a title="Comparative advantage" href="https://en.wikipedia.org/wiki/Comparative_advantage">Comparative Advantage</a>）</p>
+<p><b>比较优势（</b>又叫<b>相对优势</b>）是经济学的概念，解释了为何在拥有相对的机会成本的优势下生产，贸易对双方都有利。当一方（一个人，一间公司，或一国）进行一项生产时所付出的机会成本比另一方低，这一方面拥有了进行这项生产的比较优势。于是，一个国家倘若专门生产自己相对优势较大的产品，并通过国际贸易换取自己不具有相对优势的产品就能获得利益。</p>
+<p>于是乎，分工本来想要的是——合适的人干合适的事，<strong>但是在比较优势的情况下，商业社会把分工变成了</strong>——<strong>不是选择合适的人、公司或国家，而是选择成本低的人、公司或国家</strong>。</p>
+<p>经济合作与发展组织<a class="mw-redirect" title="OECD" href="https://en.wikipedia.org/wiki/OECD">OECD</a>最近（2015年6月28日）对全球化这样建议的——</p>
+<blockquote><p>“有效率的政策的本质不是阻止失业而是鼓励就业，如果各个国家都在收获全球化的利益而不是开放贸易的话，那么一些地方就会失去工作机会，当然也伴随着在另一些地方出现新的工作机会，这是全球化进程不可避免的，而我们面对的挑战是怎么能流畅调整我们的流程，能为那些新出现的工作机会找到合适的技能匹配的工人”。</p></blockquote>
+<p>通过上面的说明，我想你可以知道，为什么中国成为了世界劳动力大国，而为什么当初美国科技公司进入中国的时候，首先把测试的工作放到了中国。这就是所谓的全球化分工。同时我们也可以看到，像我们中国这样技术能力的确非常不足的国家，的确是可以通过分工这种形式，让我们这些技能一般的技术人员参与一个复杂的有技术含量的项目当中。这其中就是分工的光明面和阴暗面。</p>
+<p>那么，我们想一想，<strong>随着中国的人力成本的越来越大，国际化的分工因为商业资本的因素，必然不会选择中国，只会选择人力成本更低的国家，比如印度、越南、甚至人力成本更低的国家</strong>。美国雅虎和Adobe不是离开中国了么？再看看中国因为人民币的汇率或是人力成本的上升，我们在早几年关了多少个Made in China的工厂，这就是全球化的分工，商业上来说，他不是找最合适的人，而是找成本最低的人。</p>
+<p>所以，<strong>你千万不要以为我一提倡全栈了，你QA的工作就保不住了，就算没有全栈，就算是你还在坚持的社会化的分工，也可能让你的QA的工作就保不住了，除非，你能提供更低的价格</strong>。（想想这其中的逻辑吧，人家美国人把一些技术工作（比如测试）外包到中国的原因不是因为中国人聪明，想得周全，适合干这个测试这个事，而是因为中国人廉价，所以，当中国不在廉价了，自然就会找更廉价的地方了）</p>
+<p>为什么国家要从Made in China转型？不就是因为中国早期拿到的国际化分工就是这些没有技术含量的支持性的分工么？也因此而造就了大量的技能很一般的工人。为了能在全球化分工中能拿到更有质量的工作，<strong>我们必然要从劳动密集型转向成知识密集型，必然要从支持性的工作转变为产出性的工作，必然需要单一技能型的技工转变为复合型的人才</strong>。</p>
+<h4>分工的温床和天敌</h4>
+<p><strong>分工的温床主要有两个</strong>，</p>
+<ul>
+<li><strong>一个是成本和效率</strong>，资本家或企业主或一个国家为了追求更快成本更底的生产方式，他们必然会进行大规模的分工，伴随着分工，他们也会把一些知识或技术密集型的工作生生地变成劳动密集型的工作。然后层层外包。</li>
+</ul>
+<ul>
+<li><strong>一个是组织的大小</strong>，当一个组织的人数不断的变大，那么，你只能把工作和任务分得更细。这是被人数逼的，而不是实际需要的。这就是为什么我们可以看到很多大公司里要么人浮于事，要么瞎忙。</li>
+</ul>
+<p><strong>分工的天敌主要有一个——那就是技术</strong>！</p>
+<p style="padding-left: 30px;">每当新技术出现的时候，一些复杂的工序会被一台机器或是一种高超的技术所取代，不管是被技术自动化，还是被技术所简化<strong>，</strong>总之，以前本来需要数十人或是数百人才能干的事，突然之间只需要一个人就可以干完了。生产力得到了巨大的释放。所以，你这就是我们常听的——<strong>科技是第一生产力！</strong></p>
+<p>说到这里，让我们再来看看雅虎的那条新闻——</p>
+<blockquote><p>在软件开发流程中去掉QA团队会发生什么？更少的代码错误，更快的开发周期。这是雅虎工程师过去一年的实验结果。<strong>雅虎的Warp Drive计划将程序开发从批发布转移了持续交付模式</strong>，工程师的代码不经过QA团队的人工检查而是直接发布。<strong>开发模式的转变导致了处理问题理念的根本性改变，迫使工程师开发自动检查工具去识别原来由人工检查发现的错误</strong>。雅虎的技术团队现在全部是工程师，而不再有QA团队容身之处。雅虎的首席架构师 Amotz Maimon说，他们本来预计可能会发生严重问题，结果出乎意料，每个曾经对此抱有怀疑态度的人都说新做法很有效。</p></blockquote>
+<p>所以，<strong>当你面对一些难题的时候，比如线上的故障，或是一个复杂的软件生产活动，你是要加更多的流程更多的人呢，还是要用技术解决问题呢？一边是温床，一边是天敌，你想好了吗？</strong></p>
+<h4>什么样分工才是好的</h4>
+<p>分工是必然的，因为很简单，你不可能一个人干完所有的事情，所以必需要分工，<strong>分工不是问题，而问题则变成了——什么样的分工是理想的，是优雅的，是有效率的？</strong></p>
+<figure id="attachment_17302" style="width: 212px" class="wp-caption alignright"><img class="wp-image-17302" src="http://coolshell.cn//wp-content/uploads/2015/12/hua_junwu_17.jpg" alt="华君武漫画《科学分工？》" width="212" height="312" srcset="http://coolshell.cn//wp-content/uploads/2015/12/hua_junwu_17.jpg 300w, http://coolshell.cn//wp-content/uploads/2015/12/hua_junwu_17-204x300.jpg 204w" sizes="(max-width: 212px) 100vw, 212px" /><figcaption class="wp-caption-text"><strong><a href="https://zh.wikipedia.org/zh/%E5%8D%8E%E5%90%9B%E6%AD%A6" target="_blank">华君武</a>漫画《科学分工？》</strong></figcaption></figure>
+<p>对于分工来说，一般来是一种组织和管理形为。就目前来说，现代的公司有两种分工模式，分别是<strong>Control</strong> 和 <strong>Commitment</strong> 这两种分工。</p>
+<ul>
+<li><strong>Control就是控制型的管理，它是一种是基于工作技能的分工，于是员工会被这种分工分配到一个比较窄的技能里去完成一个非常明确的工作</strong>。</li>
+</ul>
+<ul>
+<li><strong>而Commitment则是面向员工的责任心和所承担的目标来分工并完成工作的。相比起前者来说，这样的分工在完成工作时，需要的不仅仅是技能，还需要更多的责任感</strong>。</li>
+</ul>
+<p>这么说吧，</p>
+<ul>
+<li>对于基于工作技能的分工，你会看到，这样的公司会把技术人员按编程语言来分，比如：Java、PHP、C/C++，或是分成：Web端、iOS端、Android端、后端、算法、数据。或是分成：开发，测试，运维。</li>
+</ul>
+<ul>
+<li>对于基于Commitment的分工，你会看到他们这样分的，软件工程师（不分前后端，不分语言，不分运维，测试），因为这样的公司认为，他招的不是只有特定语言技能的Coder，而是而学多种语言多种技术能保证软件质量以及能对软件维护的软件工程师。这种公司的软件工程师是各种团队都可以去的，而他们的分工更多的是按软件的功能，软件的模块，或是软件的产品线来分工。</li>
+</ul>
+<p>基于技能的分工已是过去时，而基于 Commitment 的分工是更有效率的分工的未来。你可以参看McAlister-Kizzier, Donna. 的文献 &#8220;<a href="http://www.encyclopedia.com/topic/Division_of_labor.aspx#3" target="_blank">Division of Labor.</a>&#8221; 。</p>
+<h4>小结</h4>
+<p>我说了这么多，不知道你看懂了我想表达什么没有？我不强加我的价值观，只希望你自己问自己几个问题：</p>
+<p style="padding-left: 30px;">1）作为工作的人，在分工中你会怎样选择？是成为一颗棋子，一颗螺丝钉，还是成为一个多面手？</p>
+<p style="padding-left: 30px;">2）作为工作的人，当你选择工作或任务的时候，你是选择做支持性的工作，还是做产出性的工作？你是选择做劳动密集型重复工作，还是做知识密集型的创新性的工作？</p>
+<p style="padding-left: 30px;">3）作为老板，你是想要什么样的员工？听话的只会加班和干重复工作的劳动力，还是有责任心的为企业和产品负责的员工？</p>
+<p style="padding-left: 30px;">4）作为老板，你是想通过分工释放低端员工的生产力，还是通过科技或技术去创造更NB的生产力？</p>
+<p style="padding-left: 30px;">5）作为老板，分工中的问题，你找到比较优的解了吗？比如，对于不同团队间的协议，你找到了吗？</p>
+<p>可能，在不同的情况下你会有不同的答案。但是对我来说呢，无论是什么情况，我都只会有一个答案。</p>
+<p>（全文完）</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-10217" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月24日</small> <a href="http://coolshell.cn/articles/10217.html" class="wp_rp_title">加班与效率</a></li><li data-position="1" data-poid="in-9156" data-post-type="none" ><small class="wp_rp_publish_date">2013年03月11日</small> <a href="http://coolshell.cn/articles/9156.html" class="wp_rp_title">《Rework》摘录及感想</a></li><li data-position="2" data-poid="in-5686" data-post-type="none" ><small class="wp_rp_publish_date">2011年10月25日</small> <a href="http://coolshell.cn/articles/5686.html" class="wp_rp_title">多些时间能少写些代码</a></li><li data-position="3" data-poid="in-17497" data-post-type="none" ><small class="wp_rp_publish_date">2016年09月18日</small> <a href="http://coolshell.cn/articles/17497.html" class="wp_rp_title">什么是工程师文化？</a></li><li data-position="4" data-poid="in-9949" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月05日</small> <a href="http://coolshell.cn/articles/9949.html" class="wp_rp_title">IoC/DIP其实是一种管理思想</a></li><li data-position="5" data-poid="in-11432" data-post-type="none" ><small class="wp_rp_publish_date">2014年04月12日</small> <a href="http://coolshell.cn/articles/11432.html" class="wp_rp_title">从Code Review 谈如何做技术</a></li><li data-position="6" data-poid="in-6994" data-post-type="none" ><small class="wp_rp_publish_date">2012年04月11日</small> <a href="http://coolshell.cn/articles/6994.html" class="wp_rp_title">我们需要专职的QA吗？</a></li><li data-position="7" data-poid="in-4951" data-post-type="none" ><small class="wp_rp_publish_date">2011年07月06日</small> <a href="http://coolshell.cn/articles/4951.html" class="wp_rp_title">软件公司的两种管理方式</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17295.html/feed</wfw:commentRss>
+		<slash:comments>110</slash:comments>
+		</item>
+		<item>
+		<title>Cuckoo Filter：设计与实现</title>
+		<link>http://coolshell.cn/articles/17225.html</link>
+		<comments>http://coolshell.cn/articles/17225.html#comments</comments>
+		<pubDate>Wed, 02 Sep 2015 01:18:54 +0000</pubDate>
+		<dc:creator><![CDATA[Leo]]></dc:creator>
+				<category><![CDATA[C/C++语言]]></category>
+		<category><![CDATA[数据库]]></category>
+		<category><![CDATA[程序设计]]></category>
+		<category><![CDATA[趣味问题]]></category>
+		<category><![CDATA[Algorithm]]></category>
+		<category><![CDATA[filter]]></category>
+		<category><![CDATA[hashing]]></category>
+		<category><![CDATA[海量数据]]></category>
+
+		<guid isPermaLink="false">http://coolshell.cn/?p=17225</guid>
+		<description><![CDATA[（感谢网友 @我的上铺叫路遥 投稿） 对于海量数据处理业务，我们通常需要一个索引数据结构，用来帮助查询，快速判断数据记录是否存在，这种数据结构通常又叫过滤器(f...<p class="read-more"><a class="btn btn-default" href="http://coolshell.cn/articles/17225.html"> Read More<span class="screen-reader-text">  Read More</span></a></p>]]></description>
+				<content:encoded><![CDATA[<p><strong>（感谢网友 </strong><a href="http://weibo.com/fullofbull" target="_blank"><strong>@我的上铺叫路遥</strong></a><strong> 投稿）</strong></p>
+<p><img class="alignright wp-image-17243 size-medium" src="http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-300x164.jpg" alt="" width="300" height="164" srcset="http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-300x164.jpg 300w, http://coolshell.cn//wp-content/uploads/2015/08/cuckoo.jpg 400w" sizes="(max-width: 300px) 100vw, 300px" /></p>
+<p>对于海量数据处理业务，我们通常需要一个索引数据结构，用来帮助查询，快速判断数据记录是否存在，这种数据结构通常又叫过滤器(filter)。考虑这样一个场景，上网的时候需要在浏览器上输入URL，这时浏览器需要去判断这是否一个恶意的网站，它将对本地缓存的成千上万的URL索引进行过滤，如果不存在，就放行，如果（可能）存在，则向远程服务端发起验证请求，并回馈客户端给出警告。</p>
+<p>索引的存储又分为有序和无序，前者使用关联式容器，比如B树，后者使用哈希算法。这两类算法各有优劣：比如，关联式容器时间复杂度稳定O(logN)，且支持范围查询；又比如哈希算法的查询、增删都比较快O(1)，但这是在理想状态下的情形，遇到碰撞严重的情况，哈希算法的时间复杂度会退化到O(n)。因此，选择一个好的哈希算法是很重要的。</p>
+<p>时下一个非常流行的哈希索引结构就是<strong><a href="https://en.wikipedia.org/wiki/Bloom_filter" target="_blank">bloom filter</a></strong>，它类似于bitmap这样的hashset，所以空间利用率很高。其独特的地方在于它使用多个哈希函数来避免哈希碰撞，如图所示（<a href="https://en.wikipedia.org/wiki/Bloom_filter" target="_blank">来源wikipedia</a>），bit数组初始化为全0，插入x时，x被3个哈希函数分别映射到3个不同的bit位上并置1，查询x时，只有被这3个函数映射到的bit位全部是1才能说明x可能存在，但凡至少出现一个0表示x肯定不存在。</p>
+<p><img class="aligncenter size-full wp-image-17242" src="http://coolshell.cn//wp-content/uploads/2015/08/Bloom_filter.png" alt="Bloom_filter" width="649" height="233" srcset="http://coolshell.cn//wp-content/uploads/2015/08/Bloom_filter.png 649w, http://coolshell.cn//wp-content/uploads/2015/08/Bloom_filter-300x108.png 300w" sizes="(max-width: 649px) 100vw, 649px" /></p>
+<p><span id="more-17225"></span></p>
+<p>但是，bloom filter的这种位图模式带来两个问题：一个是<strong>误报（false positives）</strong>，在查询时能提供“一定不存在”，但只能提供“可能存在”，因为存在其它元素被映射到部分相同bit位上，导致该位置1，那么一个不存在的元素可能会被误报成存在；另一个是<strong>漏报（false nagatives）</strong>，同样道理，如果删除了某个元素，导致该映射bit位被置0，那么本来存在的元素会被漏报成不存在。由于后者问题严重得多，所以bloom filter必须确保“definitely no”从而容忍“probably yes”，不允许元素的删除。</p>
+<p>关于元素删除的问题，一个改良方案是对bloom filter引入计数，但这样一来，原来每个bit空间就要扩张成一个计数值，空间效率上又降低了。</p>
+<h4>Cuckoo Hashing</h4>
+<p>为了解决这一问题，本文引入了一种新的哈希算法——<strong>cuckoo filter</strong>，它既可以确保该元素存在的必然性，又可以在不违背此前提下删除任意元素，仅仅比bitmap牺牲了微量空间效率。先说明一下，这个算法的思想来源是一篇<a href="http://www.cs.cmu.edu/~binfan/papers/conext14_cuckoofilter.pdf" target="_blank">CMU论文</a>，笔者按照其思路用C语言做了一个简单实现（<a href="https://github.com/begeekmyfriend/CuckooFilter" target="_blank">Github</a>），附上对一段文本数据进行导入导出的正确性测试。</p>
+<p>接下来我会结合自己的示例代码讲解哈希算法的实现。我们先来看看cuckoo hashing有什么特点，它的哈希函数是成对的（具体的实现可以根据需求设计），每一个元素都是两个，分别映射到两个位置，一个是记录的位置，另一个是备用位置。这个备用位置是处理碰撞时用的，这就要说到cuckoo这个名词的典故了，中文名叫布谷鸟，这种鸟有一种即狡猾又贪婪的习性，它不肯自己筑巢，而是把蛋下到别的鸟巢里，而且它的幼鸟又会比别的鸟早出生，布谷幼鸟天生有一种残忍的动作，幼鸟会拼命把未出生的其它鸟蛋挤出窝巢，今后以便独享“养父母”的食物。借助生物学上这一典故，cuckoo hashing处理碰撞的方法，就是把原来占用位置的这个元素踢走，不过被踢出去的元素还要比鸟蛋幸运，因为它还有一个备用位置可以安置，如果备用位置上还有人，再把它踢走，如此往复。直到被踢的次数达到一个上限，才确认哈希表已满，并执行rehash操作。如下图所示（<a href="http://codecapsule.com/2013/07/20/cuckoo-hashing/" target="_blank">图片来源</a>）：</p>
+<p><a href="http://codecapsule.com/2013/07/20/cuckoo-hashing/"><img class="aligncenter size-full wp-image-17244" src="http://coolshell.cn//wp-content/uploads/2015/08/cuckoo_preview.jpg" alt="cuckoo_preview" width="720" height="326" srcset="http://coolshell.cn//wp-content/uploads/2015/08/cuckoo_preview.jpg 720w, http://coolshell.cn//wp-content/uploads/2015/08/cuckoo_preview-300x136.jpg 300w" sizes="(max-width: 720px) 100vw, 720px" /></a></p>
+<p>&nbsp;</p>
+<p>我们不禁要问发生哈希碰撞之前的空间利用率是多少呢？不幸地告诉你，一维数组的哈希表上跟其它哈希函数没什么区别，也就50%而已。但如果是二维的呢？</p>
+<p>一个改进的哈希表如下图所示，每个桶（bucket）有4路槽位（slot）。当哈希函数映射到同一个bucket中，在其它三路slot未被填满之前，是不会有元素被踢的，这大大缓冲了碰撞的几率。笔者自己的简单实现上测过，采用二维哈希表（4路slot）大约80%的占用率（CMU论文数据据说达到90%以上，应该是扩大了slot关联数目所致）。</p>
+<p><img class="aligncenter wp-image-17241" src="http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-hashing-1024x392.png" alt="cuckoo hashing" width="650" height="249" srcset="http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-hashing-1024x392.png 1024w, http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-hashing-300x115.png 300w, http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-hashing-900x344.png 900w, http://coolshell.cn//wp-content/uploads/2015/08/cuckoo-hashing.png 1143w" sizes="(max-width: 650px) 100vw, 650px" /></p>
+<h4>Cuckoo Filter设计与实现</h4>
+<p>cuckoo hashing的原理介绍完了，下面就来演示一下笔者自己实现的一个cuckoo filter应用，简单易用为主，不到500行C代码。应用场景是这样的：假设有一段文本数据，我们把它通过cuckoo filter导入到一个虚拟的flash中，再把它导出到另一个文本文件中。flash存储的单元页面是一个log_entry，里面包含了一对key/value，value就是文本数据，key就是这段大小的数据的SHA1值（照理说SHA1是可以通过数据源生成，没必要存储到flash，但这里主要为了测试而故意设计的，万一key和value之间没有推导关系呢）。</p>
+<pre class="brush: cpp; title: ; notranslate">
+#define SECTOR_SIZE    (1 &lt;&lt; 10)
+#define DAT_LEN        (SECTOR_SIZE - 20)  /* minus sha1 size */
+
+/* The log entries store key-value pairs on flash and the
+ * size of each entry is assumed just one sector fit.
+ */
+struct log_entry {
+        uint8_t sha1[20];
+        uint8_t data[DAT_LEN];
+};
+</pre>
+<p>顺便说明一下DAT_LEN设置，之前我们设计了一个虚拟flash（用malloc模拟出来），由于flash的单位是按页大小SECTOR_SIZE读写，这里假设每个log_entry正好一个页大小，当然可以根据实际情况调整。</p>
+<p>以上是flash的存储结构，至于哈希表里的slot有三个成员tag，status和offset，分别是哈希值，状态值和在flash的偏移位置。其中status有三个枚举值：AVAILIBLE，OCCUPIED，DELETED，分别表示这个slot是空闲的，占用的还是被删除的。至于tag，按理说应该有两个哈希值，对应两个哈希函数，但其中一个已经对应bucket的位置上了，所以我们只要保存另一个备用bucket的位置就行了，这样万一被踢，只要用这个tag就可以找到它的另一个安身之所。</p>
+<pre class="brush: cpp; title: ; notranslate">
+enum { AVAILIBLE, OCCUPIED, DELETED, };
+
+/* The in-memory hash bucket cache is to filter keys (which is assumed SHA1) via
+ * cuckoo hashing function and map keys to log entries stored on flash.
+ */
+struct hash_slot_cache {
+        uint32_t tag : 30;  /* summary of key */
+        uint32_t status : 2;  /* FSM */
+        uint32_t offset;  /* offset on flash memory */
+};
+</pre>
+<p>乍看之下size有点大是吗？没关系，你也可以根据情况调整数据类型大小，比如uint16_t，这里仅仅为了测试正确性。</p>
+<p>至于哈希表以及bucket和slot的创建见初始化代码。buckets是一个二级指针，每个bucket指向4个slot大小的缓存，即4路slot，那么bucket_num也就是slot_num的1/4。这里我们故意把slot_num调小了点，为的是测试rehash的发生。</p>
+<pre class="brush: cpp; title: ; notranslate">
+#define ASSOC_WAY  (4)  /* 4-way association */
+
+struct hash_table {
+    struct hash_slot_cache **buckets;
+    struct hash_slot_cache *slots;
+    uint32_t slot_num;
+    uint32_t bucket_num;
+};
+
+int cuckoo_filter_init(size_t size)
+{
+    ...
+    /* Allocate hash slots */
+    hash_table.slot_num = nvrom_size / SECTOR_SIZE;
+    /* Make rehashing happen */
+    hash_table.slot_num /= 4;
+    hash_table.slots = calloc(hash_table.slot_num, sizeof(struct hash_slot_cache));
+    if (hash_table.slots == NULL) {
+        return -1;
+    }
+
+    /* Allocate hash buckets associated with slots */
+    hash_table.bucket_num = hash_table.slot_num / ASSOC_WAY;
+    hash_table.buckets = malloc(hash_table.bucket_num * sizeof(struct hash_slot_cache *));
+    if (hash_table.buckets == NULL) {
+        free(hash_table.slots);
+        return -1;
+    }
+    for (i = 0; i &lt; hash_table.bucket_num; i++) {
+        hash_table.buckets[i] = &amp;hash_table.slots[i * ASSOC_WAY];
+    }
+}
+</pre>
+<p>下面是哈希函数的设计，这里有两个，前面提到既然key是20字节的SHA1值，我们就可以分别是对key的低32位和高32位进行位运算，只要bucket_num满足2的幂次方，我们就可以将key的一部分同bucket_num &#8211; 1相与，就可以定位到相应的bucket位置上，注意bucket_num随着rehash而增大，哈希函数简单的好处是求哈希值十分快。</p>
+<pre class="brush: cpp; title: ; notranslate">
+#define cuckoo_hash_lsb(key, count)  (((size_t *)(key))[0] &amp; (count - 1))
+#define cuckoo_hash_msb(key, count)  (((size_t *)(key))[1] &amp; (count - 1))
+</pre>
+<p>终于要讲解cuckoo filter最重要的三个操作了——查询、插入还有删除。查询操作是简单的，我们对传进来的参数key进行两次哈希求值tag[0]和tag[1]，并先用tag[0]定位到bucket的位置，从4路slot中再去对比tag[1]。只有比中了tag后，由于只是key的一部分，我们再去从flash中验证完整的key，并把数据在flash中的偏移值read_addr输出返回。相应的，如果bucket[tag[0]]的4路slot都没有比中，我们再去bucket[tag[1]]中比对（代码略），如果还比不中，可以肯定这个key不存在。<strong>这种设计的好处就是减少了不必要的flash读操作，每次比对的是内存中的tag而不需要完整的key。</strong></p>
+<pre class="brush: cpp; title: ; notranslate">static int cuckoo_hash_get(struct hash_table *table, uint8_t *key, uint8_t **read_addr)
+{
+    int i, j;
+    uint8_t *addr;
+    uint32_t tag[2], offset;
+    struct hash_slot_cache *slot;
+
+    tag[0] = cuckoo_hash_lsb(key, table-&gt;bucket_num);
+    tag[1] = cuckoo_hash_msb(key, table-&gt;bucket_num);
+
+    /* Filter the key and verify if it exists. */
+    slot = table-&amp;gt;buckets[tag[0]];
+    for (i = 0; i bucket_num) == slot[i].tag) {
+        if (slot[i].status == OCCUPIED) {
+            offset = slot[i].offset;
+            addr = key_verify(key, offset);
+            if (addr != NULL) {
+                if (read_addr != NULL) {
+                    *read_addr = addr;
+                }
+                break;
+            }
+        } else if (slot[i].status == DELETED) {
+            return DELETED;
+        }
+    }
+    ...
+}</pre>
+<p>接下来先将简单的删除操作，之所以简单是因为delete除了将相应slot的状态值设置一下之外，其实什么都没有干，也就是说它不会真正到flash里面去把数据清除掉。为什么？很简单，没有必要。还有一个原因，flash的写操作之前需要擦除整个页面，这种擦除是会折寿的，<strong>所以很多flash支持随机读，但必须保持顺序写。</strong></p>
+<pre class="brush: cpp; title: ; notranslate">static void cuckoo_hash_delete(struct hash_table *table, uint8_t *key)
+{
+    uint32_t i, j, tag[2];
+    struct hash_slot_cache *slot;
+
+    tag[0] = cuckoo_hash_lsb(key, table-&gt;bucket_num);
+    tag[1] = cuckoo_hash_msb(key, table-&gt;bucket_num);
+
+    slot = table-&gt;buckets[tag[0]];
+    for (i = 0; i bucket_num) == slot[i].tag) {
+        slot[i].status = DELETED;
+        return;
+    }
+    ...
+}</pre>
+<p>了解了flash的读写特性，你就知道为啥插入操作在flash层面要设计成append。不过我们这里不讨论过多flash细节，哈希表层面的插入逻辑其实跟查询差不多，我就不贴代码了。这里要贴的是如何判断并处理碰撞，其实这里也没啥玄机，就是用old_tag和old_offset保存一下临时变量，以便一个元素被踢出去之后还能找到备用的安身之所。但这里会有一个判断，每次踢人都会计数，当alt_cnt大于512时候表示哈希表真的快满了，这时候需要rehash了。</p>
+<pre class="brush: cpp; title: ; notranslate">static int cuckoo_hash_collide(struct hash_table *table, uint32_t *tag, uint32_t *p_offset)
+{
+    int i, j, k, alt_cnt;
+    uint32_t old_tag[2], offset, old_offset;
+    struct hash_slot_cache *slot;
+
+    /* Kick out the old bucket and move it to the alternative bucket. */
+    offset = *p_offset;
+    slot = table-&gt;buckets[tag[0]];
+    old_tag[0] = tag[0];
+    old_tag[1] = slot[0].tag;
+    old_offset = slot[0].offset;
+    slot[0].tag = tag[1];
+    slot[0].offset = offset;
+    i = 0 ^ 1;
+    k = 0;
+    alt_cnt = 0;
+
+KICK_OUT:
+    slot = table-&gt;buckets[old_tag[i]];
+    for (j = 0; j &lt; ASSOC_WAY; j++) {
+        if (offset == INVALID_OFFSET &amp;&amp; slot[j].status == DELETED) {
+            slot[j].status = OCCUPIED;
+            slot[j].tag = old_tag[i ^ 1];
+            *p_offset = offset = slot[j].offset;
+            break;
+        } else if (slot[j].status == AVAILIBLE) {
+            slot[j].status = OCCUPIED;
+            slot[j].tag = old_tag[i ^ 1];
+            slot[j].offset = old_offset;
+            break;
+        }
+    }
+
+    if (j == ASSOC_WAY) {
+        if (++alt_cnt &gt; 512) {
+            if (k == ASSOC_WAY - 1) {
+                /* Hash table is almost full and needs to be resized */
+                return 1;
+            } else {
+                k++;
+            }
+        }
+        uint32_t tmp_tag = slot[k].tag;
+        uint32_t tmp_offset = slot[k].offset;
+        slot[k].tag = old_tag[i ^ 1];
+        slot[k].offset = old_offset;
+        old_tag[i ^ 1] = tmp_tag;
+        old_offset = tmp_offset;
+        i ^= 1;
+        goto KICK_OUT;
+    }
+
+    return 0;
+}</pre>
+<p>rehash的逻辑也很简单，无非就是把哈希表中的buckets和slots重新realloc一下，空间扩展一倍，然后再从flash中的key重新插入到新的哈希表里去。这里有个陷阱要注意，<strong>千万不能有相同的key混进来！</strong>虽然cuckoo hashing不像开链法那样会退化成O(n)，但由于每个元素有两个哈希值，而且每次计算的哈希值随着哈希表rehash的规模而不同，相同的key并不能立即检测到冲突，但当相同的key达到一定规模后，噩梦就开始了，由于rehash里面有插入操作，一旦在这里触发碰撞，又会触发rehash，这时就是一个rehash不断递归的过程，由于其中老的内存没释放，新的内存不断重新分配，整个程序就如同陷入DoS攻击一般瘫痪了。<strong>所以每次插入操作前一定要判断一下key是否已经存在过，并且对rehash里的插入使用碰撞断言防止此类情况发生。</strong>笔者在测试中不幸中了这样的彩蛋，调试了大半天才搞清楚原因，搞IT的同学们记住一定要防小人啊~</p>
+<pre class="brush: cpp; title: ; notranslate">static void cuckoo_rehash(struct hash_table *table)
+{
+    ...
+    uint8_t *read_addr = nvrom_base_addr;
+    uint32_t entries = log_entries;
+    while (entries--) {
+        uint8_t key[20];
+        uint32_t offset = read_addr - nvrom_base_addr;
+        for (i = 0; i &amp;lt; 20; i++) {
+            key[i] = flash_read(read_addr);
+            read_addr++;
+        }
+        /* Duplicated keys in hash table which can cause eternal
+         * hashing collision! Be careful of that!
+         */
+        assert(!cuckoo_hash_put(table, key, &amp;offset));
+        if (cuckoo_hash_get(&amp;old_table, key, NULL) == DELETED) {
+            cuckoo_hash_delete(table, key);
+        }
+        read_addr += DAT_LEN;
+    }
+    ...
+}</pre>
+<p>到此为止代码的逻辑还是比较简单，使用效果如何呢？我来帮你找个大文件<a href="https://github.com/unqlite/unqlite/blob/master/unqlite.c" target="_blank">unqlite.c</a>测试一下，这是一个嵌入式数据库源代码，共59959行代码。作为需要导入的文件，编译我们的cuckoo filter，然后执行：</p>
+<pre class="brush: bash; title: ; notranslate">./cuckoo_db unqlite.c output.c</pre>
+<p>你会发现生成output.c正好也是59959行代码，一分不差，probably yes终于变成了definitely yes。同时也可以看到，cuckoo filter真的很快！如果你想看hashing的整个过程，可以参照<a href="https://github.com/begeekmyfriend/CuckooFilter/blob/master/README.md" target="_blank">README</a>里把调试宏打开。最后，欢迎给<a href="https://github.com/begeekmyfriend/CuckooFilter" target="_blank">这个小玩意</a>提交PR！</p>
+<h4>参考资料</h4>
+<p>Cuckoo Filter的<a href="http://www.cs.cmu.edu/~binfan/papers/conext14_cuckoofilter.pdf" target="_blank">论文</a>和<a href="http://www.cs.cmu.edu/~binfan/papers/conext14_cuckoofilter.pptx" target="_blank">PPT</a>：Cuckoo Filter: Practically Better Than Bloom</p>
+<p align="center"><a href=http://cn.udacity.com/course/android-basics-nanodegree-by-google--nd803-cn-basic/?utm_source=coolshell&#038;utm_medium=referral&#038;utm_campaign=AND02 target=_blank><img src=https://s3.cn-north-1.amazonaws.com.cn/static-documents/marketing/uda_banner_170209.png></a></p>
+<p align="center"><img src=http://coolshell.cn//wp-content/uploads/2009/04/qrcode_for_gh_dd9d8c843f20_860-300x300.jpg><br />关注CoolShell微信公众账号可以在手机端搜索文章</p>
+<div style="margin-top: 15px; font-size: 11px;color: #cc0000;">
+<p align=center><strong>（转载本站文章请注明作者和出处 <a href="http://coolshell.cn/">酷 壳 &#8211; CoolShell</a> ，请勿用于任何商业用途）</strong></div>
+<div style="text-align:center;padding:0px;font-size: 14px;margin-bottom: 50px;">——=== <b>访问 <a href=http://coolshell.cn/404/ target=_blank>酷壳404页面</a> 寻找遗失儿童。</b> ===——</div>
+
+<div class="wp_rp_wrap  wp_rp_plain" ><div class="wp_rp_content"><h3 class="related_post_title">相关文章</h3><ul class="related_post wp_rp"><li data-position="0" data-poid="in-10427" data-post-type="none" ><small class="wp_rp_publish_date">2013年10月09日</small> <a href="http://coolshell.cn/articles/10427.html" class="wp_rp_title">伙伴分配器的一个极简实现</a></li><li data-position="1" data-poid="in-3738" data-post-type="none" ><small class="wp_rp_publish_date">2011年02月28日</small> <a href="http://coolshell.cn/articles/3738.html" class="wp_rp_title">打印质数的各种算法</a></li><li data-position="2" data-poid="in-8239" data-post-type="none" ><small class="wp_rp_publish_date">2012年09月07日</small> <a href="http://coolshell.cn/articles/8239.html" class="wp_rp_title">无锁队列的实现</a></li><li data-position="3" data-poid="in-7425" data-post-type="none" ><small class="wp_rp_publish_date">2012年05月17日</small> <a href="http://coolshell.cn/articles/7425.html" class="wp_rp_title">rsync 的核心算法</a></li><li data-position="4" data-poid="in-9886" data-post-type="none" ><small class="wp_rp_publish_date">2013年07月14日</small> <a href="http://coolshell.cn/articles/9886.html" class="wp_rp_title">二叉树迭代器算法</a></li><li data-position="5" data-poid="in-11847" data-post-type="none" ><small class="wp_rp_publish_date">2014年08月06日</small> <a href="http://coolshell.cn/articles/11847.html" class="wp_rp_title">谜题的答案和活动的心得体会</a></li><li data-position="6" data-poid="in-11832" data-post-type="none" ><small class="wp_rp_publish_date">2014年08月03日</small> <a href="http://coolshell.cn/articles/11832.html" class="wp_rp_title">【活动】解迷题送礼物</a></li><li data-position="7" data-poid="in-4671" data-post-type="none" ><small class="wp_rp_publish_date">2011年05月04日</small> <a href="http://coolshell.cn/articles/4671.html" class="wp_rp_title">可视化的数据结构和算法</a></li></ul></div></div>
+]]></content:encoded>
+			<wfw:commentRss>http://coolshell.cn/articles/17225.html/feed</wfw:commentRss>
+		<slash:comments>34</slash:comments>
+		</item>
+	</channel>
+</rss>
+
+<!-- Dynamic page generated in 0.543 seconds. -->
+<!-- Cached page generated by WP-Super-Cache on 2017-04-21 16:24:24 -->
+
+<!-- Compression = gzip -->

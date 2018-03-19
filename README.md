@@ -1,7 +1,7 @@
 # SearchEngine
 
 [![Author](https://img.shields.io/badge/author-@Jeysin-blue.svg?style=flat)](http://www.cnblogs.com/jeysin/) 
-[![Platform](https://img.shields.io/badge/platform-Linux-green.svg?style=flat)](https://github.com/yanyiwu/cppjieba)
+[![Platform](https://img.shields.io/badge/platform-Linux-green.svg?style=flat)](https://github.com/Jeysin/searchEngine)
 
 ## 简介
 
@@ -48,7 +48,7 @@ cd bin
 + Email: `jeysin@qq.com`
 + QQ: `2214744822`
 + WeChat: `jiaxian_jiang`
-+ Blog: `http://www.cnblogs.com/jeysin/`
++ Blog: [http://www.cnblogs.com/jeysin/](http://www.cnblogs.com/jeysin/)
 
 
 

@@ -1,5 +1,4 @@
 #include"../include/ReadConfigFile.h"
-#include"../include/Mylog.h"
 #include<fstream>
 #include<sstream>
 #include<iostream>
@@ -9,7 +8,6 @@ using std::ifstream;
 using std::getline;
 using std::istringstream;
 using std::make_pair;
-using jjx::Mylog;
 
 namespace jjx
 {
@@ -25,7 +23,7 @@ ReadConfigFile::ReadConfigFile(const string &filename)
 	ifstream ifs(filename);
 	if(!ifs.is_open())
 	{
-		Mylog::getInstance()->_root.error(" ReadConfigFile: open ConfigFile error");
+		cout<<" ReadConfigFile: open ConfigFile error"<<endl;
 		exit(EXIT_FAILURE);
 	}
 	string line;

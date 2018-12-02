@@ -23,6 +23,7 @@
 + `Log4cpp`
 + `CppJieba`
 + `Json`
++ `Apache2`
 
 ### 下载、编译和运行
 
